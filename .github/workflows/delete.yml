@@ -1,21 +1,20 @@
-name: Workflow and Cache Cleanup
-
+name: 🧹 Nettoyage des Workflows et du Cache
 on:
   workflow_dispatch:
     inputs:
       workflow_name:
         type: choice
-        description: '清理的工作流名称'
+        description: 'Nom du workflow à nettoyer'
         required: true
-        default: 'Build OnePlus_SukiSU Ultra All'
+        default: '🚀 Construire OnePlus SukiSU Ultra (Tout en un) 📱'
         options:
-          - Build OnePlus_SukiSU Ultra All
-          - CAll Build Start UP
-          - Build TEST
-          - Build TEST2
+          - '🚀 Construire OnePlus SukiSU Ultra (Tout en un) 📱'
+          - '🚀 Lancer le Build Groupé'
+          - 'Build TEST'
+          - 'Build TEST2'
       cache_mode:
         type: choice
-        description: '缓存清理类型'
+        description: 'Type de nettoyage du cache'
         required: false
         default: 'none'
         options:
@@ -24,31 +23,31 @@ on:
           - ccache
           - apt-cache
       count:
-        description: '最多访问的运行次数'
+        description: 'Nombre maximum de runs à traiter'
         required: false
         default: '20'
       delete_failed:
-        description: '删除指定工作流失败的运行记录？'
+        description: 'Supprimer les runs échoués ?'
         required: false
         type: boolean
         default: true
       delete_success:
-        description: '删除指定工作流成功的运行记录？'
+        description: 'Supprimer les runs réussis ?'
         required: false
         type: boolean
         default: false
       delete_cancelled:
-        description: '删除指定工作流取消的运行记录？'
+        description: 'Supprimer les runs annulés ?'
         required: false
         type: boolean
         default: false
       reverse_order:
-        description: '从旧到新开始清理？'
+        description: 'Nettoyer du plus ancien au plus récent ?'
         required: false
         type: boolean
         default: false
       cancel_all:
-        description: '是否一键取消指定工作流的所有运行？'
+        description: 'Annuler tous les runs en cours pour ce workflow ?'
         required: false
         type: boolean
         default: false
@@ -61,15 +60,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 安装环境
+      - name: 🛠️ Installation de l'environnement
         run: |
           sudo apt-get update
           sudo apt-get install -y gh jq
 
-      - name: 认证 GitHub CLI
+      - name: 🔐 Authentification GitHub CLI
         run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
 
-      - name: 清理指定工作流运行记录
+      - name: 🧹 Nettoyage des enregistrements du workflow
         env:
           REPO: ${{ github.repository }}
           COUNT: ${{ inputs.count }}
@@ -83,14 +82,14 @@ jobs:
         run: |
           set -e
 
-          echo "查找工作流 \"$WORKFLOW_NAME\" 的 ID..."
+          echo "Recherche de l'ID pour le workflow \"$WORKFLOW_NAME\"..."
           WORKFLOW_ID=$(gh api repos/$REPO/actions/workflows | jq -r ".workflows[] | select(.name == \"$WORKFLOW_NAME\") | .id")
           if [ -z "$WORKFLOW_ID" ]; then
-            echo "未找到工作流 \"$WORKFLOW_NAME\"，退出。"
+            echo "Workflow \"$WORKFLOW_NAME\" introuvable, sortie."
             exit 1
           fi
 
-          echo "开始分页获取所有运行记录..."
+          echo "Récupération des enregistrements par page..."
           PER_PAGE=100
           PAGE=1
           ALL_RUNS="[]"
@@ -103,21 +102,21 @@ jobs:
             PAGE=$((PAGE + 1))
           done
 
-          echo "共获取到 $(echo "$ALL_RUNS" | jq 'length') 条运行记录。"
+          echo "Total : $(echo "$ALL_RUNS" | jq 'length') enregistrements trouvés."
 
           if [[ "$CANCEL_ALL" == "true" ]]; then
-            echo "开始取消进行中或排队中的运行..."
+            echo "Annulation des runs en cours ou en attente..."
             CANCEL_COUNT=0
             echo "$ALL_RUNS" | jq -c '.[] | select(.status == "in_progress" or .status == "queued")' | while read run; do
               ID=$(echo "$run" | jq -r '.id')
               if [[ "$ID" == "$CURRENT_RUN_ID" ]]; then continue; fi
-              echo "取消运行 ID: $ID"
+              echo "Annulation du run ID: $ID"
               gh api -X POST "repos/$REPO/actions/runs/$ID/cancel" && CANCEL_COUNT=$((CANCEL_COUNT + 1))
             done
-            echo "已取消 $CANCEL_COUNT 条运行。"
+            echo "$CANCEL_COUNT runs annulés."
           fi
 
-          echo "开始处理删除逻辑..."
+          echo "Traitement de la suppression..."
           if [[ "$REVERSE_ORDER" == "true" ]]; then
             SORTED_RUNS=$(echo "$ALL_RUNS" | jq 'sort_by(.run_started_at)')
           else
@@ -126,7 +125,7 @@ jobs:
 
           TO_DELETE_RUNS=$(echo "$SORTED_RUNS" | jq ".[0:${COUNT}]")
 
-          echo "$TO_DELETE_RUNS" | jq -c '.[]' | while read run; do
+          echo "$TO_DELETE_RUNS"| jq -c '.[]' | while read run; do
             ID=$(echo "$run" | jq -r '.id')
             STATUS=$(echo "$run" | jq -r '.conclusion')
             STATE=$(echo "$run" | jq -r '.status')
@@ -136,19 +135,19 @@ jobs:
             if [[ "$STATUS" == "success" && "$DELETE_SUCCESS" != "true" ]]; then continue; fi
             if [[ "$STATUS" == "cancelled" && "$DELETE_CANCELLED" != "true" ]]; then continue; fi
 
-            echo "删除运行记录 ID: $ID"
-            gh api -X DELETE "repos/$REPO/actions/runs/$ID" || echo "删除失败"
+            echo "Suppression du run ID: $ID"
+            gh api -X DELETE "repos/$REPO/actions/runs/$ID" || echo "Échec de la suppression"
           done
 
-          echo "清理本工作流运行记录（排除当前运行）..."
-          SELF_WORKFLOW_ID=$(gh api repos/$REPO/actions/workflows | jq -r '.workflows[] | select(.name == "Workflow and Cache Cleanup") | .id')
+          echo "Nettoyage des enregistrements de ce workflow (Hors actuel)..."
+          SELF_WORKFLOW_ID=$(gh api repos/$REPO/actions/workflows | jq -r '.workflows[] | select(.name == "🧹 Nettoyage des Workflows et du Cache") | .id')
           if [ -n "$SELF_WORKFLOW_ID" ]; then
             SELF_RUNS=$(gh api "repos/$REPO/actions/workflows/$SELF_WORKFLOW_ID/runs?per_page=50" | jq -c '.workflow_runs[]')
             echo "$SELF_RUNS" | while read run; do
               ID=$(echo "$run" | jq -r '.id')
               if [[ "$ID" == "$CURRENT_RUN_ID" ]]; then continue; fi
-              echo "删除本工作流运行记录 ID: $ID"
-              gh api -X DELETE "repos/$REPO/actions/runs/$ID" || echo "删除失败"
+              echo "Suppression du run ID: $ID"
+              gh api -X DELETE "repos/$REPO/actions/runs/$ID" || echo "Échec de la suppression"
             done
           fi
 
@@ -159,7 +158,7 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: 根据模式清理缓存
+      - name: 🧹 Nettoyage du cache selon le mode
         uses: actions/github-script@v6
         with:
           script: |

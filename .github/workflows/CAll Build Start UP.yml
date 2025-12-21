@@ -1,16 +1,15 @@
-name: CAll Build Start UP
-
+name: 🚀 Lancer le Build Groupé
 on:
   workflow_dispatch:
     inputs:
       BATCH:
-        description: "9个一组分批并行-选择分支(1-4)"
+        description: "📱 Sélection du lot (Seul le lot 3 contient le OnePlus 13)"
         required: true
-        default: "1"
+        default: "3"
       CONFIRMATION:
-        description: "我已看完README.md,了解此工作流的风险和作用,有能力取消卡住的工作流运行和删除缓存,并执意继续运行"
+        description: "✅ J'ai lu le README.md, je comprends les risques et je souhaite continuer."
         required: true
-        default: "请输入完整标题"
+        default: "Entrez la phrase de confirmation"
 
 permissions:
   actions: read
@@ -22,70 +21,27 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Check User Confirmation
+      - name: 🛡️ Vérifier la confirmation utilisateur
         run: |
           CONFIRM="${{ github.event.inputs.CONFIRMATION }}"
-          EXPECT="我已看完README.md,了解此工作流的风险和作用,有能力取消卡住的工作流运行和删除缓存,并执意继续运行"
+          EXPECT="J'ai lu le README.md, je comprends les risques et je souhaite continuer."
 
           if [[ "$CONFIRM" != "$EXPECT" ]]; then
-            echo "❌ 输入无效，您未正确确认工作流风险。请阅读更新日志并正确输入确认内容。如果你仅仅只是想运行单个机型，这不是你该来的地方，请使用本仓库的另外一个工作流文件 Build OnePlus_SukiSU Ultra All"
+            echo "❌ Confirmation invalide. Veuillez lire le README et entrer la phrase correcte. Si vous voulez construire un seul modèle, utilisez le workflow 'Construire OnePlus SukiSU Ultra'."
             exit 1
           fi
 
-      - name: Set Matrix from FILE List
+      - name: 📋 Définir la matrice depuis la liste de fichiers
         id: set-matrix
         run: |
           BATCH="${{ github.event.inputs.BATCH }}"
 
-          if [[ "$BATCH" == "1" ]]; then
+          if [[ "$BATCH" == "3" ]]; then
             FILE_LIST=(
-              "oneplus_nord_ce4_lite_5g_v"
-              "oneplus_nord_ce4_v"
-              "oneplus_nord_4_v"
-              "oneplus_ace_3v_v"
-              "oneplus_10_pro_v"
-              "oneplus_10t_v"
-              "oneplus_11r_v"
-              "oneplus_ace2_v"
-              "oneplus_ace_pro_v"
-            )
-          elif [[ "$BATCH" == "2" ]]; then
-            FILE_LIST=(
-              "oneplus_11_v"
-              "oneplus_12r_v"
-              "oneplus_ace2_pro_v"
-              "oneplus_ace3_v"
-              "oneplus_open_v"
-              "oneplus_12_v"
-              "oneplus_13r"
-              "oneplus_ace3_pro_v"
-              "oneplus_ace5"
-            )
-          elif [[ "$BATCH" == "3" ]]; then
-            FILE_LIST=(
-              "oneplus_pad_pro_v"
-              "oneplus_pad2_v"
-              "oneplus_nord_5"
-              "oneplus_ace5_pro"
-              "oneplus_ace5_pro_b"
-              "oneplus_13"
               "oneplus_13_b"
-              "oneplus_13t"
-              "oneplus_13t_b"
-            )
-          elif [[ "$BATCH" == "4" ]]; then
-            FILE_LIST=(
-              "oneplus_13_global"
-              "oneplus_13s"
-              "oneplus_13s_b"
-              "oneplus_pad_2_pro"
-              "oneplus_pad_3"
-              "oneplus_ace5_ultra"
-              "oneplus_ace_6"
-              "oneplus_15"
             )
           else
-            echo "无效的 BATCH 值: $BATCH"
+            echo "❌ Lot invalide ou non supporté : $BATCH. SEUL LE LOT 3 EST CONSERVÉ POUR LE ONEPLUS 13."
             exit 1
           fi
 
@@ -115,10 +71,10 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     steps:
-      - name: Call Original Workflow
+      - name: 📞 Appeler le workflow d'origine
         uses: benc-uk/workflow-dispatch@v1
         with:
-          workflow: Build OnePlus_SukiSU Ultra All
+          workflow: 🚀 Construire OnePlus SukiSU Ultra (Tout en un) 📱
           token: ${{ secrets.GITHUB_TOKEN }}
           inputs: |
             {
@@ -134,19 +90,19 @@ jobs:
               "ZRAM": "false"
             }
 
-      - name: Wait for Builds to Finish or Exit Early
+      - name: ⏳ Attendre la fin du build ou quitter
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           FILE="${{ matrix.file_short }}"
-          echo "等待目标构建 $FILE 上传对应 Artifact..."
+          echo "Attente du téléchargement de l'artéfact pour $FILE..."
 
           SECONDS=0
           MAX_TIME=$((35 * 60))
           sleep 600
 
           while (( SECONDS < MAX_TIME )); do
-            echo "查询已上传的 Artifact（已等待 $SECONDS 秒）..."
+            echo "Recherche des artéfacts (Attente : $SECONDS s)..."
             ALL_ARTIFACTS=$(gh api --paginate repos/${{ github.repository }}/actions/artifacts --jq '.artifacts[].name')
 
             if echo "$ALL_ARTIFACTS" | grep -E -q "$FILE"; then
