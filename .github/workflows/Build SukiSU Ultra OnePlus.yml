@@ -736,8 +736,19 @@ jobs:
       - name: 🩹 Appliquer ZRAM
         if: ${{ github.event.inputs.ZRAM == 'true' }}
         run: |
-          PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/SukiSU_patch/other/zram/zram_patch/${{ env.KERNEL_VERSION }}"
           cd kernel_workspace/kernel_platform/common
+          
+          # 🔍 Détection de ZRAM lz4k pré-intégré
+          if grep -rq "CONFIG_CRYPTO_LZ4K" arch/arm64/configs/ 2>/dev/null || \
+             grep -rq "lz4k" crypto/ 2>/dev/null || \
+             [ -f "lib/lz4k.c" ]; then
+            echo "::warning::⚠️ ZRAM LZ4K DÉJÀ PRÉSENT dans le kernel source"
+            echo "::notice::Étape ZRAM ignorée pour éviter les conflits de patch"
+            exit 0
+          fi
+          
+          echo "✅ ZRAM LZ4K non détecté, application du patch..."
+          PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/SukiSU_patch/other/zram/zram_patch/${{ env.KERNEL_VERSION }}"
           echo "Application du patch lz4kd..."
           patch -p1 -F 3 < "${PATCH_DIR}/lz4kd.patch" || true
           echo 'Patch lz4kd terminé'
@@ -746,12 +757,22 @@ jobs:
           echo 'Patch lz4k_oplus terminé'
 
 
+
       - name: 🩹 Appliquer SCHED (Fengchi)
         env:
           FILE: ${{ github.event.inputs.FILE }}
         if: ${{ github.event.inputs.SCHED == 'true' }}
         run: |
           cd kernel_workspace/kernel_platform/common
+          
+          # 🔍 Détection de Fengchi pré-intégré
+          if [ -d "kernel/sched/hmbird" ]; then
+            echo "::warning::⚠️ Fengchi/Hmbird DÉJÀ PRÉSENT dans le kernel source (kernel/sched/hmbird)"
+            echo "::notice::Étape SCHED ignorée pour éviter les conflits de patch"
+            exit 0
+          fi
+          
+          echo "✅ Fengchi non détecté, application du patch..."
           git clone https://github.com/Numbersf/SCHED_PATCH.git -b $CPU || { echo "❌ Branche CPU inexistante, Fengchi ne supporte pas encore votre modèle. Réessayez après avoir désactivé."; exit 11; }
           echo "Téléchargement du patch Fengchi..."
           cp ./SCHED_PATCH/fengchi_${FILE}.patch ./
@@ -769,6 +790,16 @@ jobs:
         if: ${{ github.event.inputs.LSM == 'true' }}
         run: |
           cd kernel_workspace/kernel_platform/common
+          
+          # 🔍 Détection de LSM Baseband Guard pré-intégré
+          if grep -rq "baseband_guard" security/ 2>/dev/null || \
+             grep -rq "CONFIG_SECURITY_BBG" security/Kconfig 2>/dev/null; then
+            echo "::warning::⚠️ LSM Baseband Guard DÉJÀ PRÉSENT dans le kernel source"
+            echo "::notice::Étape LSM_BBG ignorée pour éviter les conflits"
+            exit 0
+          fi
+          
+          echo "✅ LSM BBG non détecté, application..."
           echo "Activation de la protection de la bande de base au niveau du noyau…"
           curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./security/Kconfig
