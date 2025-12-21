@@ -42,30 +42,6 @@ on:
         description: "⏰ Temps de construction personnalisé (Entrez 'F' pour l'heure UTC actuelle)"
         required: false
         default: "Mon Aug 18 09:30:24 UTC 2025"
-      SUSFS_CI:
-        type: choice
-        description: "SUSFS模块下载调用方向"
-        required: true
-        default: NoN
-        options:
-          - CI
-          - Release
-          - NoN
-      SUSFS_META:
-        type: string
-        description: "回退SUSFS到指定哈希版本"
-        required: false
-        default: ""
-      DYNAMIC_REPO:
-        type: string
-        description: "动态清单仓库所有者"
-        required: true
-        default: "Numbersf"
-      BUILD_TIME:
-        type: string
-        description: "自定义构建时间(输入F使用当前UTC时间)"
-        required: false
-        default: "Mon Aug 18 09:30:24 UTC 2025"
       KSU_META:
         type: string
         description: "🆔 Branche/Tag/Hash KernelSU (Format: branche/tag/hash)"
@@ -175,7 +151,7 @@ jobs:
           echo "FILE_CONF=$FILE_CONF" >> $GITHUB_ENV
           echo "FILE_BASE=$FILE_BASE" >> $GITHUB_ENV
 
-          # 动态调用源码清单仓库，仓库优先级：1️⃣ OnePlusOSS → 2️⃣ Numbersf(可换)
+          # Appel dynamique au dépôt de manifeste source, priorité : 1️⃣ OnePlusOSS → 2️⃣ Numbersf (modifiable)
           DYNAMIC_REPO_INPUT="${{ github.event.inputs.DYNAMIC_REPO }}"
           declare -A REPOS
           REPOS["OnePlusOSS"]="https://api.github.com/repos/OnePlusOSS/kernel_manifest"
@@ -188,17 +164,17 @@ jobs:
             local OWNER=$1
             local REPO_URL=$2
 
-            echo "🌐 尝试拉取 ${OWNER} 分支列表..."
+            echo "🌐 Tentative de récupération des branches de ${OWNER}..."
             BRANCHES=$(curl -s ${REPO_URL}/branches | jq -r '.[].name' || true)
             if [[ -z "$BRANCHES" ]]; then
-              echo "⚠️ ${OWNER} 分支列表获取失败，跳过。"
+              echo "⚠️ Échec de récupération des branches de ${OWNER}, ignoré."
               return 1
             fi
             for BRANCH in $BRANCHES; do
               XML_URL="https://raw.githubusercontent.com/${OWNER}/kernel_manifest/$BRANCH/${FILE}.xml"
               README_URL="https://raw.githubusercontent.com/${OWNER}/kernel_manifest/$BRANCH/README.md"
               if curl -sf --head "$XML_URL" > /dev/null; then
-                echo "✅ 在 ${OWNER} 找到 ${FILE}.xml (分支: $BRANCH)"
+                echo "✅ Trouvé ${FILE}.xml dans ${OWNER} (branche: $BRANCH)"
                 curl -s -o "$XML_PATH" "$XML_URL"
                 curl -s -o "$README_PATH" "$README_URL" || true
                 FOUND_REPO="$OWNER"
@@ -209,13 +185,13 @@ jobs:
             return 1
           }
 
-          # 默认仓库寻找文件
+          # Recherche du fichier dans le dépôt par défaut
           if check_repo "OnePlusOSS" "${REPOS["OnePlusOSS"]}"; then
             echo "MANIFEST_REPO=OnePlusOSS" >> $GITHUB_ENV
             echo "MANIFEST_BRANCH=$FOUND_BRANCH" >> $GITHUB_ENV
           fi
 
-          # 动态仓库寻找文件
+          # Recherche du fichier dans le dépôt dynamique
           if [[ -z "$FOUND_REPO" ]]; then
             DYNAMIC_URL="${REPOS["Dynamic"]}"
             DYNAMIC_OWNER=$(echo "$DYNAMIC_URL" | sed -E 's#https://api.github.com/repos/([^/]+)/.*#\1#')
@@ -226,29 +202,29 @@ jobs:
           fi
 
           if [[ -z "$FOUND_REPO" || ! -s "$XML_PATH" ]]; then
-            echo "❌ 无法在动态仓库中找到 ${FILE}.xml"
+            echo "❌ Impossible de trouver ${FILE}.xml dans le dépôt dynamique"
             exit 1
           fi
 
-          # 解析 revision 字符串
+          # Analyse de la chaîne revision
           REVISION=$(grep -oP '<project[^>]+revision="\K[^"]+' "$XML_PATH" | head -n1 || true)
-          echo "解析 FILE 获取 CPU 和 ANDROID_VERSION..."
-          # 提取 CPU
+          echo "Analyse du FILE pour obtenir CPU et ANDROID_VERSION..."
+          # Extraction du CPU
           CPU=$(echo "$REVISION" | sed -E 's#^(oneplus|realme|oppo)/([^_]+).*#\2#')
-          # 提取 ANDROID_VERSION
+          # Extraction de la version Android
           ANDROID_VERSION=$(echo "$REVISION" | grep -oP '\d{1,2}\.\d{1,2}(\.\d{1,2})?')
           if [[ -n "$CPU" && -n "$ANDROID_VERSION" ]]; then
             echo "✅ CPU=$CPU, ANDROID_VERSION=$ANDROID_VERSION"
             echo "CPU=$CPU" >> $GITHUB_ENV
             echo "ANDROID_VERSION=$ANDROID_VERSION" >> $GITHUB_ENV
-            # 获取短位 Android 版本号
+            # Obtention de la version courte d'Android
             echo "ANDROID_SHORT_VERSION=${ANDROID_VERSION%%.*}" >> $GITHUB_ENV
           else
-            echo "❌ 无法从 revision 中提取 CPU 或 ANDROID_VERSION"
+            echo "❌ Impossible d'extraire CPU ou ANDROID_VERSION depuis revision"
             exit 1
           fi
 
-          echo "解析 README.md 获取 CPUD 和 BUILD_METHOD..."
+          echo "Analyse du README.md pour obtenir CPUD et BUILD_METHOD..."
           if [[ -s "$README_PATH" ]]; then
             BUILD_LINE=$(grep -m1 'oplus_build_kernel.sh' "$README_PATH" || true)
             if [[ -n "$BUILD_LINE" ]]; then
@@ -258,12 +234,12 @@ jobs:
               echo "CPUD=$CPUD" >> $GITHUB_ENV
               echo "BUILD_METHOD=$BUILD_METHOD" >> $GITHUB_ENV
             else
-              echo "❌ README.md 中未找到构建命令"
+              echo "❌ Commande de build introuvable dans README.md"
             fi
           else
-            echo "❌ README.md 下载失败或为空"
+            echo "❌ Échec du téléchargement de README.md"
           fi
-          # 传递组合信息
+          # Transmission des informations combinées
           echo "value=${FILE_BASE}_Android${ANDROID_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Debug Show Selected Inputs
@@ -424,7 +400,7 @@ jobs:
           echo "KV2=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
           echo "KV3=${NEW_VERSION}"     | tr -d '.' >> $GITHUB_ENV
 
-      # 自定义内核后缀
+      # Suffixe personnalisé du noyau
       - name: 🏷️ Suffixe personnalisé du noyau (si défini)
         if: ${{ github.event.inputs.SUFFIX != '' }}
         run: |
@@ -472,7 +448,7 @@ jobs:
           git add -A
           git commit -m "Suffixe personnalisé & suppression de -dirty"
 
-      # 伪官方格式的随机后缀（仅在 SUFFIX 未设置时生效）*
+      # Suffixe aléatoire au format pseudo-officiel (uniquement si SUFFIX n'est pas défini)*
       - name: 🎲 Suffixe aléatoire (si vide)
         if: ${{ github.event.inputs.SUFFIX == '' }}
         run: |
@@ -614,7 +590,7 @@ jobs:
           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
-            echo "正在拉取zram补丁"
+            echo "Téléchargement du patch zram"
             cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux/
             cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib/
             cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto/
@@ -676,7 +652,7 @@ jobs:
             fi
           fi
 
-      # OGKI转换GKI，无需修改 dtbo 开机
+      # Conversion OGKI vers GKI, pas besoin de modifier dtbo pour démarrer
       - name: 🔄 Convertir HMBIRD_OGKI en HMBIRD_GKI (Pas de changement DTBO requis)
         if: ${{ fromJSON(env.KV1) >= 6 && fromJSON(env.KV2) >= 66 && github.event.inputs.SCHED == 'false' }}
         run: |
@@ -733,7 +709,7 @@ jobs:
           curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./security/Kconfig
 
-      # 配置信息，带*为附加项目，具有一定危险性和不确定性
+      # Paramètres de configuration, les éléments avec * sont additionnels avec une certaine dangerosité et incertitude
       - name: ⚙️ Ajouter les paramètres de configuration
         run: |
           cd kernel_workspace/kernel_platform/common
@@ -822,7 +798,7 @@ jobs:
             echo "Votre appareil ne supporte pas IPv6 NAT, étape ignorée."
           fi
 
-      # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
+      # Temps de build personnalisé, sans ajouter #1 SMP PREEMPT
       - name: 🕒 Personnaliser le BUILD_TIME
         shell: bash
         run: |

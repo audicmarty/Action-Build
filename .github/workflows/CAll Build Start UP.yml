@@ -106,15 +106,15 @@ jobs:
             ALL_ARTIFACTS=$(gh api --paginate repos/${{ github.repository }}/actions/artifacts --jq '.artifacts[].name')
 
             if echo "$ALL_ARTIFACTS" | grep -E -q "$FILE"; then
-              echo "✅ 找到匹配的 Artifact：$(echo "$ALL_ARTIFACTS" | grep -E "$FILE" | head -n1)"
+              echo "✅ Artefact correspondant trouvé : $(echo "$ALL_ARTIFACTS" | grep -E "$FILE" | head -n1)"
               exit 0
             fi
 
-            echo "未找到匹配的 Artifact，休眠5min继续..."
+            echo "Artefact correspondant introuvable, attente de 5min..."
             sleep 300
           done
 
-          echo "❌ 超时未检测到 $FILE 的构建成功 Artifact。"
+          echo "❌ Délai dépassé : Artefact de build $FILE non détecté."
           exit 1
 
       - name: Clean ccache After Build
@@ -139,7 +139,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "查找当前 Batch 的 Artifacts..."
+          echo "Recherche des artéfacts du Batch actuel..."
           mkdir -p all_artifacts
 
           BATCH="${{ github.event.inputs.BATCH }}"
@@ -191,7 +191,7 @@ jobs:
               "oneplus_15"
             )
           else
-            echo "无效的 BATCH 值: $BATCH"
+            echo "❌ Valeur de BATCH invalide : $BATCH"
             exit 1
           fi
 
@@ -213,7 +213,7 @@ jobs:
           done
 
           if [[ "${#MATCHED_ARTIFACTS[@]}" -eq 0 ]]; then
-            echo "没有匹配的 Artifact，终止"
+            echo "Aucun artéfact correspondant, arrêt"
             exit 1
           fi
 
@@ -227,15 +227,15 @@ jobs:
           mkdir -p all_artifacts
           IFS=';' read -ra NAMES <<< "${{ steps.list-artifacts.outputs.ARTIFACT_NAMES }}"
           for NAME in "${NAMES[@]}"; do
-            echo "查找 artifact $NAME 的 ID..."
+            echo "Recherche de l'ID de l'artéfact $NAME..."
             ARTIFACT_ID=$(gh api repos/${{ github.repository }}/actions/artifacts --jq ".artifacts[] | select(.name==\"$NAME\") | .id")
             if [[ -n "$ARTIFACT_ID" ]]; then
-              echo "下载 $NAME (ID: $ARTIFACT_ID)..."
+              echo "Téléchargement de $NAME (ID: $ARTIFACT_ID)..."
               curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                    -o "all_artifacts/${NAME}.zip" \
                    "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${ARTIFACT_ID}/zip"
             else
-              echo "未找到 $NAME 的 ID，跳过"
+              echo "ID de $NAME introuvable, ignoré"
             fi
           done
 
