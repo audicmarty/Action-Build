@@ -42,6 +42,11 @@ on:
         description: "⏰ Temps de construction personnalisé (Entrez 'F' pour l'heure UTC actuelle)"
         required: false
         default: "Mon Aug 18 09:30:24 UTC 2025"
+      CUSTOM_KERNEL:
+        type: string
+        description: "🔧 Noyau personnalisé (Format: proprietaire/repo/branche) - Laisser vide pour officiel OnePlus"
+        required: false
+        default: ""
       KSU_META:
         type: string
         description: "🆔 Branche/Tag/Hash SukiSU Ultra (Format: branche/tag/hash)"
@@ -359,7 +364,66 @@ jobs:
             rm -f "$dir/android/abi_gki_protected_exports_"* 2>/dev/null || echo "Pas d'exports protégés dans $dir"
           done
 
-      - name: 🔢 Gestion de la version du noyau
+      - name: � Utiliser un noyau personnalisé (si spécifié)
+        if: ${{ github.event.inputs.CUSTOM_KERNEL != '' }}
+        run: |
+          cd kernel_workspace/kernel_platform
+          CUSTOM_KERNEL="${{ github.event.inputs.CUSTOM_KERNEL }}"
+          
+          # Extraction du format proprietaire/repo/branche
+          OWNER=$(echo "$CUSTOM_KERNEL" | cut -d'/' -f1)
+          REPO=$(echo "$CUSTOM_KERNEL" | cut -d'/' -f2)
+          BRANCH=$(echo "$CUSTOM_KERNEL" | cut -d'/' -f3)
+          
+          if [[ -z "$OWNER" || -z "$REPO" ]]; then
+            echo "❌ Format CUSTOM_KERNEL invalide. Utilisez: proprietaire/repo/branche"
+            exit 1
+          fi
+          
+          # Si pas de branche spécifiée, utiliser main
+          if [[ -z "$BRANCH" ]]; then
+            BRANCH="main"
+            echo "⚠️ Aucune branche spécifiée, utilisation de 'main'"
+          fi
+          
+          echo "🔧 Noyau personnalisé détecté :"
+          echo "   📦 Propriétaire : $OWNER"
+          echo "   📁 Dépôt : $REPO"
+          echo "   🌿 Branche : $BRANCH"
+          
+          # Sauvegarder les fichiers de configuration importants de common
+          echo "💾 Sauvegarde des fichiers de configuration..."
+          mkdir -p /tmp/common_backup
+          cp -r common/build.config.* /tmp/common_backup/ 2>/dev/null || true
+          cp -r common/arch/arm64/configs /tmp/common_backup/ 2>/dev/null || true
+          
+          # Supprimer l'ancien common et cloner le nouveau
+          echo "🗑️ Suppression de l'ancien kernel common..."
+          rm -rf common
+          
+          echo "📥 Clonage du noyau personnalisé depuis https://github.com/${OWNER}/${REPO}.git (branche: $BRANCH)..."
+          git clone --depth=1 -b "$BRANCH" "https://github.com/${OWNER}/${REPO}.git" common
+          
+          # Restaurer les fichiers de configuration si nécessaire
+          if [ -d common ]; then
+            echo "✅ Noyau personnalisé cloné avec succès"
+            
+            # Vérifier si les fichiers de config existent, sinon restaurer
+            if [ ! -f common/build.config.common ]; then
+              echo "📂 Restauration des fichiers de configuration..."
+              cp -r /tmp/common_backup/build.config.* common/ 2>/dev/null || true
+            fi
+          else
+            echo "❌ Échec du clonage du noyau personnalisé"
+            exit 1
+          fi
+          
+          # Exporter les infos pour les étapes suivantes
+          echo "CUSTOM_KERNEL_OWNER=$OWNER" >> $GITHUB_ENV
+          echo "CUSTOM_KERNEL_REPO=$REPO" >> $GITHUB_ENV
+          echo "CUSTOM_KERNEL_BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: �🔢 Gestion de la version du noyau
         run: |
           cd kernel_workspace/kernel_platform
           for f in ./common/build.config.constants ./common/build.config.common; do
