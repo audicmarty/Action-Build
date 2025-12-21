@@ -44,7 +44,7 @@ on:
         default: "Mon Aug 18 09:30:24 UTC 2025"
       KSU_META:
         type: string
-        description: "🆔 Branche/Tag/Hash KernelSU (Format: branche/tag/hash)"
+        description: "🆔 Branche/Tag/Hash SukiSU Ultra (Format: branche/tag/hash)"
         required: false
         default: "builtin/Numbersf/"
       SUFFIX:
