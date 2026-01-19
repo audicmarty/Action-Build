@@ -677,7 +677,7 @@ jobs:
           
           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
             SUSFS_META="${{ github.event.inputs.SUSFS_META }}"
-            # Check existing in the target directory
+            # Check existing in kernel_platform
             if [ -f "kernel_platform/${TARGET}/fs/susfs.c" ]; then
                 echo "SUSFS already present in source, skipping clone."
             else
@@ -730,7 +730,7 @@ jobs:
           if [[ "${{ env.KV2 }}" == "66" && "${{ env.KV3 }}" -le 6630 && "${{ github.event.inputs.SUSFS_META }}" != "-1" ]]; then
             TRUSTY_EXISTS="false"
             if [ "${{ env.IS_FLAT }}" == "true" ]; then
-                # Flat kernels usually don't have separate manifests or trusty defined the same way, assuming false for now
+                # Flat kernels usually don't have separate manifests or trusty defined in same way, assuming false for now
                 # or we check if kernel-modules/trusty exists
                 if [ -d "../kernel_modules/trusty" ]; then TRUSTY_EXISTS="true"; fi
             elif grep -q 'common-modules/trusty' "$GITHUB_WORKSPACE/.repo/manifests_fallback/${FILE}.xml"; then
@@ -754,10 +754,17 @@ jobs:
                 fi
             fi
             
+            # --- FIX START: Safe handling of No_5uS.patch ---
             if [ "${{ github.event.inputs.XUS_FIX }}" = "true" ]; then
-              cp ../../Action-Build/patches/No_5uS.patch ./
-              patch -p1 < No_5uS.patch || true
-            fi    
+              XUS_PATCH="../../Action-Build/patches/No_5uS.patch"
+              if [ -f "$XUS_PATCH" ]; then
+                cp "$XUS_PATCH" ./
+                patch -p1 < No_5uS.patch || true
+              else
+                echo "Warning: No_5uS.patch not found in Action-Build/patches. Skipping."
+              fi
+            fi
+            # --- FIX END ---
           fi
 
       - name: Apply Convert HMBIRD_OGKI to HMBIRD_GKI
