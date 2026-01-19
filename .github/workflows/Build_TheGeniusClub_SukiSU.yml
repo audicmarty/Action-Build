@@ -1,0 +1,352 @@
+name: Build TheGeniusClub SukiSU (OnePlus 13 - Dodge)
+
+on:
+  workflow_dispatch:
+    inputs:
+      # General Settings
+      KERNEL_REPO:
+        description: "Target Kernel Repository (User/Repo)"
+        required: true
+        default: "TheGeniusClub/android_kernel_common_oneplus_sm8750"
+      KERNEL_BRANCH:
+        description: "Branch to build"
+        required: true
+        default: "main"
+      DEFCONFIG:
+        description: "Defconfig to use"
+        required: true
+        default: "gki_defconfig"
+        
+      # SukiSU Settings
+      KSU_META:
+        type: string
+        description: "SukiSU Branch/CustomTag/Hash (e.g. main//)"
+        required: false
+        default: "main/"
+      
+      # Feature Toggles
+      SUSFS:
+        description: "Enable SUSFS (Warning: Check if already present)"
+        type: boolean
+        default: true
+      SUSFS_DEV:
+        description: "Use SUSFS DEV branch"
+        type: boolean
+        default: false
+      ZRAM:
+        description: "Enable LZ4KD ZRAM"
+        type: boolean
+        default: false
+      BBR_ECN:
+        description: "Enable BBR + ECN"
+        type: boolean
+        default: true
+      LSM:
+        description: "Enable Baseband Guard (LSM)"
+        type: boolean
+        default: false
+      UNICODE_BYPASS:
+        description: "Add Unicode Bypass"
+        type: boolean
+        default: false
+        
+      # Build Settings
+      BUILD_TIME:
+        type: string
+        description: "Custom Build Time (F = UTC Now)"
+        required: false
+        default: "F"
+      SUFFIX:
+        type: string
+        description: "Custom Kernel Suffix"
+        required: false
+        default: ""
+      USE_BUILDER_SCRIPT:
+        description: "Use repo's root build.sh if found? (Uncheck for manual make)"
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: Build Kernel for ${{ inputs.KERNEL_REPO }}
+    runs-on: ubuntu-latest
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CCACHE_MAXSIZE: 8G
+    steps:
+      - name: Checkout Action Scripts
+        uses: actions/checkout@v4
+        with:
+          path: action_scripts
+
+      - name: Setup Environment
+        run: |
+          sudo swapoff -a
+          sudo fallocate -l 3G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Install Dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest 
+        with: 
+          packages: python3 git curl ccache libelf-dev build-essential flex bison libssl-dev libncurses-dev liblz4-tool zlib1g-dev libxml2-utils rsync unzip gawk dos2unix bc zip
+          execute_install_scripts: true
+
+      - name: Clone TheGeniusClub Kernel
+        run: |
+          mkdir -p kernel_workspace
+          git clone -b ${{ inputs.KERNEL_BRANCH }} https://github.com/${{ inputs.KERNEL_REPO }} kernel_workspace/kernel_platform/common
+          cd kernel_workspace/kernel_platform/common
+          echo "KERNEL_SOURCE=$(pwd)" >> $GITHUB_ENV
+          
+          # Detect Kernel Version
+          KV=$(grep "^VERSION = " Makefile | awk '{print $3}')
+          KPL=$(grep "^PATCHLEVEL = " Makefile | awk '{print $3}')
+          echo "KERNEL_VERSION=$KV.$KPL" >> $GITHUB_ENV
+          
+          # Check for build script
+          if [ -f "build.sh" ]; then
+             echo "BUILD_SCRIPT_FOUND=true" >> $GITHUB_ENV
+          fi
+
+      - name: Setup Ccache
+        uses: actions/cache@v3
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ inputs.KERNEL_REPO }}-${{ inputs.KERNEL_BRANCH }}-v1
+
+      - name: Initialize Ccache
+        run: |
+          ccache -M ${{ env.CCACHE_MAXSIZE }}
+          ccache -s
+
+      - name: SukiSU Integration
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          
+          # Smart Check: Is KernelSU already there?
+          if [ -d "kernel/ksu" ]; then
+            echo "⚠️ KernelSU source already exists. Backing up..."
+            mv kernel/ksu kernel/ksu_backup
+          fi
+
+          # Apply SukiSU Setup
+          KSU_META="${{ inputs.KSU_META }}"
+          if [[ "$(grep -o '/' <<< "$KSU_META" | wc -l)" -lt 2 ]]; then
+            # Ensure default format
+            KSU_META="main/"
+          fi
+          
+          IFS='/' read -r BRANCH_NAME CUSTOM_TAG MANUAL_HASH <<< "$KSU_META"
+          
+          echo "Applying SukiSU Ultra from branch: $BRANCH_NAME"
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$BRANCH_NAME"
+          
+          # Handle Manual Hash if specified
+          if [ -n "$MANUAL_HASH" ]; then
+            cd KernelSU && git fetch origin "$BRANCH_NAME" --depth=50 && git checkout "$MANUAL_HASH" && cd ..
+          fi
+          
+          # Restore config if setup script overwrote it unintentionally, 
+          # or ensure we are using the correct KSU version logic
+          # (The setup script usually handles Kbuild automatically)
+
+      - name: Download Patches
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          
+          # SUSFS
+          if [ "${{ inputs.SUSFS }}" = "true" ]; then
+             # Check if SUSFS files already exist to avoid conflict
+             if [ -f "fs/susfs.c" ]; then
+                echo "✅ SUSFS already present in source. Skipping download."
+                echo "SUSFS_EXISTS=true" >> $GITHUB_ENV
+             else
+                echo "📥 Downloading SUSFS patches..."
+                git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android16-6.12${{ inputs.SUSFS_DEV == 'true' && '-dev' || '' }} || \
+                git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6${{ inputs.SUSFS_DEV == 'true' && '-dev' || '' }} || \
+                echo "Failed to find specific SUSFS branch, trying master"
+                echo "SUSFS_EXISTS=false" >> $GITHUB_ENV
+             fi
+          fi
+          
+          # ZRAM
+          if [ "${{ inputs.ZRAM }}" = "true" ]; then
+             git clone https://github.com/ShirkNeko/SukiSU_patch.git
+          fi
+
+      - name: Apply Patches (Smart Mode)
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          
+          apply_patch_safely() {
+             local patch_file=$1
+             local check_str=$2
+             
+             # Check if we can apply the patch
+             if [ -f "$check_str" ]; then
+                echo "✅ Feature '$(basename $patch_file)' seems already integrated (file found). Skipping patch."
+                return
+             fi
+             
+             if [ -f "$patch_file" ]; then
+                if patch -p1 --dry-run --silent -N < "$patch_file" 2>/dev/null; then
+                    echo "🔧 Applying patch: $(basename $patch_file)"
+                    patch -p1 -N < "$patch_file" || echo "⚠️ Patch failed or partially applied"
+                else
+                    echo "⏭️ Patch $(basename $patch_file) skipped (already applied or not suitable)"
+                fi
+             fi
+          }
+
+          # --- SUSFS Application ---
+          if [ "${{ inputs.SUSFS }}" = "true" ] && [ "$SUSFS_EXISTS" != "true" ]; then
+             # Try to find the patch file based on version
+             SUSFS_PATCH=$(find . -name "50_add_susfs*.patch" | head -n1)
+             if [ -n "$SUSFS_PATCH" ]; then
+                apply_patch_safely "$SUSFS_PATCH" "fs/susfs.c"
+                
+                # Copy SUSFS source files if patch created them or patch requires manual copy
+                # Note: susfs4ksu patch usually adds files, but sometimes requires manual copy if patch is partial
+                if [ -d "susfs4ksu/kernel_patches/fs" ]; then
+                   echo "Copying SUSFS source files (Smart)..."
+                   find susfs4ksu/kernel_patches -name '*.c' -o -name '*.h' | while read file; do
+                      dest=$(echo $file | sed 's|susfs4ksu/kernel_patches/||')
+                      mkdir -p "$(dirname "$dest")"
+                      # Only copy if not present
+                      [ ! -f "$dest" ] && cp "$file" "$dest"
+                   done
+                fi
+             fi
+          fi
+
+          # --- ZRAM Application ---
+          if [ "${{ inputs.ZRAM }}" = "true" ]; then
+             # Logic for ZRAM patches from SukiSU_patch
+             ZRAM_DIR="SukiSU_patch/other/zram/zram_patch/${{ env.KERNEL_VERSION }}"
+             if [ -d "$ZRAM_DIR" ]; then
+                apply_patch_safely "$ZRAM_DIR/lz4kd.patch" "crypto/lz4k.c"
+                apply_patch_safely "$ZRAM_DIR/lz4k_oplus.patch" "lib/lz4k_oplus.c"
+             fi
+          fi
+
+          # --- Unicode Bypass ---
+          if [ "${{ inputs.UNICODE_BYPASS }}" = "true" ]; then
+             # Assuming we can reuse the patches from Action-Build/patches
+             PATCH_DIR="../../action_scripts/patches"
+             if [ "$KERNEL_VERSION" = "6.1" ] || [ "$KERNEL_VERSION" = "5.15" ] || [ "$KERNEL_VERSION" = "5.10" ]; then
+                 apply_patch_safely "$PATCH_DIR/unicode_bypass_fix_6.1-.patch" "fs/namei.c"
+             else
+                 apply_patch_safely "$PATCH_DIR/unicode_bypass_fix_6.1+.patch" "fs/namei.c"
+             fi
+          fi
+
+      - name: Configure Kernel
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          CONFIG="${{ inputs.DEFCONFIG }}"
+          
+          # Build the config
+          make $CONFIG ARCH=arm64 LLVM=1 LLVM_IAS=1
+          
+          # Enable SukiSU features
+          ./scripts/kconfig/merge_config.sh .config \
+            -e CONFIG_KSU \
+            -e CONFIG_KSU_DEBUG \
+            -e CONFIG_HAVE_KSU_VERIFIER
+            
+          # Enable SUSFS config
+          if [ "${{ inputs.SUSFS }}" = "true" ]; then
+             ./scripts/kconfig/merge_config.sh .config \
+               -e CONFIG_KSU_SUSFS \
+               -e CONFIG_KSU_SUSFS_SUS_PATH \
+               -e CONFIG_KSU_SUSFS_SUS_MOUNT \
+               -e CONFIG_KSU_SUSFS_SPOOF_UNAME
+          fi
+          
+          # Net & BBR
+          if [ "${{ inputs.BBR_ECN }}" = "true" ]; then
+             ./scripts/kconfig/merge_config.sh .config \
+               -e CONFIG_TCP_CONG_BBR \
+               -e CONFIG_NET_SCH_FQ \
+               -e CONFIG_IP_ECN \
+               -e CONFIG_TCP_ECN
+          fi
+
+          # ZRAM
+          if [ "${{ inputs.ZRAM }}" = "true" ]; then
+             ./scripts/kconfig/merge_config.sh .config \
+               -e CONFIG_CRYPTO_LZ4K \
+               -e CONFIG_CRYPTO_LZ4KD \
+               -e CONFIG_ZRAM_WRITEBACK
+          fi
+          
+          # LSM
+          if [ "${{ inputs.LSM }}" = "true" ]; then
+             # BBG might be a patch, just enabling config here. 
+             # If BBG requires patching, it should be added to the patch step similar to SUSFS.
+             ./scripts/kconfig/merge_config.sh .config \
+               -e CONFIG_BBG
+          fi
+
+          # Finalize .config
+          make oldconfig ARCH=arm64 LLVM=1 LLVM_IAS=1
+
+      - name: Build Kernel
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          
+          # TheGeniusClub usually provides a build.sh or we use make
+          # Adding toolchain to path if needed, or trusting repo's setup
+          
+          export PATH="/usr/lib/ccache:$PATH"
+          export CC="ccache clang"
+          
+          if [ "${{ inputs.USE_BUILDER_SCRIPT }}" = "true" ] && [ -f "build.sh" ]; then
+             echo "Using repo build.sh..."
+             bash build.sh
+          else
+             echo "Using manual make..."
+             make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+               CLANG_TRIPLE=aarch64-linux-gnu- \
+               CROSS_COMPILE=aarch64-linux-gnu- \
+               CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+               Image.gz-dtb
+          fi
+          
+          # Fallback for standard Image
+          if [ ! -f "arch/arm64/boot/Image.gz-dtb" ] && [ -f "arch/arm64/boot/Image" ]; then
+             echo "Found Image, compressing..."
+             gzip -c arch/arm64/boot/Image > arch/arm64/boot/Image.gz
+             # Copy dtb if exists
+             find arch/arm64/boot/dts -name "*.dtb" -exec cat {} + >> arch/arm64/boot/Image.gz 2>/dev/null || true
+          fi
+
+      - name: Prepare AnyKernel3
+        run: |
+          git clone https://github.com/Numbersf/AnyKernel3 --depth=1
+          rm -rf ./AnyKernel3/.git
+            
+          IMAGE_PATH=$(find kernel_workspace/kernel_platform/common/arch/arm64/boot -name "Image.gz-dtb" -o -name "Image" | head -n1)
+          if [ -z "$IMAGE_PATH" ]; then
+            echo "❌ ERROR: No kernel image found!"
+            find kernel_workspace/kernel_platform/common/arch/arm64/boot -type f
+            exit 1
+          fi
+          
+          echo "Found Image: $IMAGE_PATH"
+          cp "$IMAGE_PATH" ./AnyKernel3/
+          
+          # Modules (Optional, might increase zip size)
+          # find kernel_workspace/kernel_platform/common -name "*.ko" -exec cp {} ./AnyKernel3/modules/system/lib/modules/ \;
+
+      - name: Upload Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SukiSU_OnePlus13_Dodge_${{ inputs.SUFFIX }}
+          path: ./AnyKernel3/*
