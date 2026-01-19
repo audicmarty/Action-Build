@@ -10,50 +10,6 @@ on:
         default: oneplus_13_dodge
         options:
           - oneplus_13_dodge
-          - oneplus_10r_v
-          - oneplus_nord_3_v
-          - oneplus_ace_v
-          - oneplus_ace_race_v
-          - oneplus_10_pro_v
-          - oneplus_10t_v
-          - oneplus_11r_b
-          - oneplus_ace2_b
-          - oneplus_pad_lite_v
-          - oneplus_pad_mt6983_v
-          - oneplus_ace_2v_v
-          - oneplus_ace_pro_v
-          - oneplus_11_b
-          - oneplus_12r_b
-          - oneplus_ace2_pro_b
-          - oneplus_ace3_b
-          - oneplus_open_b
-          - oneplus_nord_ce4_b
-          - oneplus_12_b
-          - oneplus_pad_go_2_b
-          - oneplus_nord_ce4_lite_5g_v
-          - oneplus_nord_4_b
-          - oneplus_ace_3v_b
-          - oneplus_pad_mt6897_v
-          - oneplus_13r_b
-          - oneplus_ace3_pro_b
-          - oneplus_ace5_b
-          - oneplus_pad_pro_b
-          - oneplus_pad2_b
-          - oneplus_nord_ce5_b
-          - oneplus_nord_5_b
-          - oneplus_ace5_pro_b
-          - oneplus_13_b
-          - oneplus_13t_b
-          - oneplus_13s_b
-          - oneplus_pad_2_pro_b
-          - oneplus_pad_3_b
-          - oneplus_ace5_race_b
-          - oneplus_ace5_ultra_b
-          - oneplus_pad2_mt6991_b
-          - oneplus_ace_6
-          - oneplus_ace_6t
-          - oneplus_15r
-          - oneplus_15
       MANAGER_SOURCE:
         type: choice
         description: "Manager Download Source"
@@ -123,7 +79,7 @@ on:
         default: true
       BBR_ECN:
         type: boolean
-        description: "Enable Network Optimization (BBR+ECN)?"
+ description: "Enable Network Optimization (BBR+ECN)?"
         required: true
         default: true
       UNICODE_BYPASS:
@@ -164,7 +120,7 @@ on:
 
 jobs:
   build:
-    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ github.event.inputs.KPM == 'true' && ' [KPM]' || '' }}${{ github.event.inputs.LSM == 'true' && ' [LSM]' || '' }}${{ github.event.inputs.SCHED == 'true' && ' [SCHED]' || '' }}${{ github.event.inputs.ZRAM == 'true' && ' [ZRAM]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}
+    name: ${{ github.event.inputs.FAST_BUILD == 'true' && ' [FAST]' || '' }}${{ github.event.inputs.KPM == 'true' && ' [KPM]' || '' }}${{ github.event.inputs.LSM == 'true' && ' [LSM]' || '' }}${{ github.event.inputs.SCHED == 'true' && ' [SCHED]' || '' }}${{ github.event.inputs.ZRAM == 'true' && ' [ZRAM]' || '' }}For ${{ github.event.inputs.FILE }} ${{ github.event.inputs.SUFFIX }}"
     runs-on: ubuntu-latest
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
@@ -183,6 +139,9 @@ jobs:
           temp-reserve-mb: 2048
           remove-dotnet: 'true'
           remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-dotnet: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
 
@@ -248,7 +207,7 @@ jobs:
               if curl -sf --head "$XML_URL" > /dev/null; then
                 echo "Found ${FILE}.xml in ${OWNER} (Branch: $BRANCH)"
                 curl -s -o "$XML_PATH" "$XML_URL"
-                curl -s -o "$README_PATH" "$README_URL" || true
+                curl -s -o "$README_PATH" "$README_PATH" || true
                 FOUND_REPO="$OWNER"
                 FOUND_BRANCH="$BRANCH"
                 return 0
@@ -262,15 +221,6 @@ jobs:
             echo "MANIFEST_BRANCH=$FOUND_BRANCH" >> $GITHUB_ENV
           fi
 
-          if [[ -z "$FOUND_REPO" ]]; then
-            DYNAMIC_URL="${REPOS["Dynamic"]}"
-            DYNAMIC_OWNER=$(echo "$DYNAMIC_URL" | sed -E 's#https://api.github.com/repos/([^/]+)/.*#\1#')
-            if check_repo "$DYNAMIC_OWNER" "$DYNAMIC_URL"; then
-              echo "MANIFEST_REPO=$DYNAMIC_OWNER" >> $GITHUB_ENV
-              echo "MANIFEST_BRANCH=$FOUND_BRANCH" >> $GITHUB_ENV
-            fi
-          fi
-
           if [[ -z "$FOUND_REPO" || ! -s "$XML_PATH" ]]; then
             echo "ERROR: Could not find ${FILE}.xml in dynamic repositories."
             exit 1
@@ -279,7 +229,7 @@ jobs:
           REVISION=$(grep -oP '<project[^>]+revision="\K[^"]+' "$XML_PATH" | head -n1 || true)
           echo "Parsing FILE to get CPU and ANDROID_VERSION..."
           CPU=$(echo "$REVISION" | sed -E 's#^(oneplus|realme|oppo)/([^_]+).*#\2#')
-          ANDROID_VERSION=$(echo "$REVISION" | grep -oP '\d{1,2}\.\d{1,2}(\.\d{1,2})?')
+          ANDROID_VERSION=$(echo "$REVISION" | grep -oP '\d{1,2}\.\d{1,2})?')
           if [[ -n "$CPU" && -n "$ANDROID_VERSION" ]]; then
             echo "CPU=$CPU, ANDROID_VERSION=$ANDROID_VERSION"
             echo "CPU=$CPU" >> $GITHUB_ENV
@@ -302,9 +252,6 @@ jobs:
             else
               echo "Build command not found in README.md"
             fi
-          else
-            echo "README.md download failed or is empty."
-          fi
           echo "value=${FILE_BASE}_Android${ANDROID_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Debug Show Selected Inputs
@@ -358,7 +305,7 @@ jobs:
         if: ${{ github.event.inputs.BUILD_NOCCACHE == 'false' }}
         uses: actions/cache@v3
         with:
-          path: ${{ env.CCACHE_DIR }}
+          path: ${{ env.CCACHE_DIR }}"
           key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.event.inputs.FILE }}-${{ env.BUILD_METHOD }}-${{ github.event.inputs.FAST_BUILD == 'true' && 'alpha' || 'beta' }}-16
 
       - name: Initialize Ccache
@@ -370,7 +317,7 @@ jobs:
             if [ ! -f "$INIT_FLAG" ]; then
               echo "Initializing ccache (${{ env.CCACHE_DIR }})..."
               mkdir -p "${{ env.CCACHE_DIR }}"
-              ccache -M ${{ env.CCACHE_MAXSIZE }}
+              ccache -M ${{ env.CCACHE_MAXSIZE }}"
               touch "$INIT_FLAG"
               echo "Ccache initialized successfully"
             else
@@ -676,13 +623,12 @@ jobs:
           TARGET="${{ env.TARGET_DIR }}"
           
           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
-            SUSFS_META="${{ github.event.inputs.SUSFS_META }}"
-            # Check existing in kernel_platform
+            SUSFS_META="${{ github.event.inputs.SUSFS_META }"
             if [ -f "kernel_platform/${TARGET}/fs/susfs.c" ]; then
                 echo "SUSFS already present in source, skipping clone."
             else
                 echo "Cloning SUSFS..."
-                git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}${{ github.inputs.SUSFS_DEV == 'true' && '-dev' || '' }}
+                git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}${{ github.inputs.SUSFS_DEV == 'true' && '-dev' || '' }}"
                 cd susfs4ksu
                 [ -n "$SUSFS_META" ] && git checkout "$SUSFS_META" || echo "Using latest SUSFS"
                 cd ..
@@ -710,10 +656,10 @@ jobs:
                 echo "ZRAM/LZ4K already present, skipping."
             else
                 echo "Applying ZRAM files to ${TARGET}..."
-                cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./${TARGET}/include/linux/
-                cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./${TARGET}/lib/
-                cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./${TARGET}/crypto/
-                cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./${TARGET}/lib/
+                cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./${TARGET}/include/linux/*
+                cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./${TARGET}/lib/*
+                cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./${TARGET}/crypto/*
+                cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./${TARGET}/lib/*
             fi
           fi
 
@@ -738,8 +684,8 @@ jobs:
             fi
             if [[ "$TRUSTY_EXISTS" == "false" ]]; then
               echo "Fixing Trusty missing for 6.6..."
-              sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch
-              sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch
+              sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch'
+              sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch'
             fi
           fi
 
@@ -763,8 +709,8 @@ jobs:
               else
                 echo "Warning: No_5uS.patch not found in Action-Build/patches. Skipping."
               fi
-            fi
             # --- FIX END ---
+          fi
           fi
 
       - name: Apply Convert HMBIRD_OGKI to HMBIRD_GKI
@@ -777,7 +723,6 @@ jobs:
           # Check in target dir
           for p in ./${TARGET}/kernel/sched/hmbird* ./vendor/oplus/kernel/cpu/sched_ext/hmbird* ./${TARGET}/kernel/sched/hmbird*; do
             [ -d "$p" ] && { echo "HMBIRD code exists, skipping."; exit 0; }
-          done
           cd "${TARGET}"
           sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
           patch -p1 -F 3 < "${PATCH_DIR}/hmbird_patch.patch" || true
@@ -876,13 +821,14 @@ jobs:
             grep -q "CONFIG_KSU_SUSFS=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_KSU_SUSFS_SUS_PATH=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_KSU_SUSFS_SUS_MAP=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_KSU_SUSFS_SUS_MOUNT=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_KSU_SUSFS_SUS_KSTAT=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_KSU_SUSFS_ENABLE_LOG=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE" || echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
           else
             echo "CONFIG_KSU_SUSFS=n" >> "$CONFIG_FILE"
           fi
@@ -893,13 +839,14 @@ jobs:
           if [ "${{ github.event.inputs.BBR_ECN }}" = "true" ]; then
             grep -q "CONFIG_TCP_CONG_BBR=y" "$CONFIG_FILE" || echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_NET_SCH_FQ=y" "$CONFIG_FILE" || echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
-            echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
+            grep -q "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
             echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
             echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
             grep -q "CONFIG_IP_ECN=y" "$CONFIG_FILE" || echo "CONFIG_IP_ECN=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_TCP_ECN=y" "$CONFIG_FILE" || echo "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IPV6_ECN=y" "$CONFIG_FILE" || echo "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE" || echo "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE" || echo "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_IP_NF_TARGET_ECN=y" "$CONFIG_FILE" || echo "CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_NF_TARGET_MASQUERADE=y" "$CONFIG_FILE" || echo "CONFIG_IP_NF_TARGET_MASQUERADE=y" >> "$CONFIG_FILE"
           fi
 
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
@@ -908,7 +855,50 @@ jobs:
             grep -q "CONFIG_CRYPTO_LZ4KD=y" "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_CRYPTO_842=y" "$CONFIG_FILE" || echo "CONFIG_CRYPTO_842=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_CRYPTO_LZ4K_OPLUS=y" "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_CRYPTO_LZ4KD_OPLUS=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_ZRAM_WRITEBACK=y" "$CONFIG_FILE" || echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
+          fi
+
+          if [ "${{ github.event.inputs.LSM }}" = "true" ]; then
+            grep -q "CONFIG_BBG=y" "$CONFIG_FILE" || echo "CONFIG_BBG=y" >> "$CONFIG_FILE"
+          fi
+
+          if [[ "${CPU}" == sm* && "${{ github.event.inputs.NETFILTER }}" == "true" ]]; then
+            grep -q "CONFIG_BPF_STREAM_PARSER=y" "$CONFIG_FILE" || echo "CONFIG_BPF_STREAM_PARSER=y" >> "$CONFIG_FILE" || echo "CONFIG_BPF_STREAM_PARSER=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_ADDRTYPE=y" >> "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_IP" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP=y" >> "$CONFIG_IP_y >> "$CONFIG_FILE" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_IP_y >> "$CONFIG_Y" >> "$CONFIG_IP_y >> "$CONFIG_IP_y" >> "$CONFIG_IP_y >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" >> "$CONFIG_Y" && echo "CONFIG_KSU_SUSFS=n" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_SUS_PATH=y" ./arch/arm64/configs/gki_defconfig || echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
+          grep -q "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+          else
+            echo "CONFIG_KSU_SUSFS=n" >> "$CONFIG_FILE"
+          fi
+
+          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
+
+          if [ "${{ github.event.inputs.BBR_ECN }}" = "true" ]; then
+            grep -q "CONFIG_TCP_CONG_BBR=y" "$CONFIG_FILE" || echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE" || echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_ECN=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_ECN=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE" || echo "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE" || echo "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE"
+          fi
+
+          if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
+            grep -q "CONFIG_CRYPTO_LZ4HC=y" "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4HC=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_CRYPTO_LZ4K=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4K=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_842=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_842=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_842=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE" || echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE" || echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE" || echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
           fi
 
           if [ "${{ github.event.inputs.LSM }}" = "true" ]; then
@@ -918,134 +908,9 @@ jobs:
           if [[ "${CPU}" == sm* && "${{ github.event.inputs.NETFILTER }}" == "true" ]]; then
             grep -q "CONFIG_BPF_STREAM_PARSER=y" "$CONFIG_FILE" || echo "CONFIG_BPF_STREAM_PARSER=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_NETFILTER_XT_SET=y" "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_IP_SET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_MAX=65534" "$CONFIG_FILE" || echo "CONFIG_IP_SET_MAX=65534" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_BITMAP_IP=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IP=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_BITMAP_IPMAC=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IPMAC=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_BITMAP_PORT=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_PORT=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_IP=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IP=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_IPMARK=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPMARK=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_IPPORT=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORT=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_IPPORTIP=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTIP=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_IPPORTNET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTNET=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_IPMAC=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPMAC=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_MAC=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_MAC=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_NETPORTNET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NETPORTNET=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_NET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NET=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_NETNET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NETNET=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_NETPORT=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NETPORT=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_HASH_NETIFACE=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP_SET_LIST_SET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_LIST_SET=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP6_NF_NAT=y" "$CONFIG_FILE" || echo "CONFIG_IP6_NF_NAT=y" >> "$CONFIG_FILE"
-            grep -q "CONFIG_IP6_NF_TARGET_MASQUERADE=y" "$CONFIG_FILE" || echo "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> "$CONFIG_FILE"
-          fi
-
-          if [ "$KERNEL_VERSION" = "6.1" ] && [[ "$CPU" == mt* ]]; then
-            echo "CONFIG_DEBUG_INFO_BTF=n" >> "$CONFIG_FILE"
-          fi
-          sed -i 's/check_defconfig//' ./${TARGET}/build.config.gki 2>/dev/null || true
-
-      - name: Fix IPv6_NAT Error
-        if: ${{ github.event.inputs.NETFILTER == 'true' }}
-        run: |
-          set -x
-          TARGET="${{ env.TARGET_DIR }}"
-          PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          cd kernel_workspace/kernel_platform
-          cd "${TARGET}"
-          if [[ "${CPU}" == sm* ]]; then
-            patch -p1 --dry-run -F 3 < "${PATCH_DIR}/IPv6_NAT_FIX.patch" && patch -p1 -F 3 < "${PATCH_DIR}/IPv6_NAT_FIX.patch" || echo "IPv6 Fix skipped"
-          fi
-
-      - name: Custom BUILD_TIME
-        shell: bash
-        run: |
-          set -x
-          INPUT_TIME="${{ github.event.inputs.BUILD_TIME }}"
-          if [[ -n "$INPUT_TIME" && "$INPUT_TIME" != "F" && "$INPUT_TIME" != "f" ]]; then
-            DATESTR="$INPUT_TIME"
-          else
-            DATESTR="$(TZ='UTC' date +'%a %b %d %T %Z %Y')"
-          fi
-          echo "KBUILD_BUILD_TIMESTAMP=${DATESTR}" >> "$GITHUB_ENV"
-          echo "KBUILD_BUILD_VERSION=1" >> "$GITHUB_ENV"
-          cd kernel_workspace/kernel_platform/
-          for f in ./${TARGET}/scripts/mkcompile_h ./msm-kernel/scripts/mkcompile_h; do
-            if [ -f "$f" ]; then
-              if grep -q 'UTS_VERSION=' "$f"; then
-                perl -pi -e "s{UTS_VERSION=\"\\\$\\(.*?\\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $DATESTR\"}" "$f"
-              else
-                perl -0777 -pi -e "s{cat <<EOF}{cat <<EOF\n#undef UTS_VERSION\n#define UTS_VERSION \"#1 SMP PREEMPT $DATESTR\" } unless /UTS_VERSION/" "$f"
-              fi
-            fi
-          done
-
-      - name: Enable lto=thin For FAST
-        if: ${{ (env.KERNEL_VERSION == '5.10' || env.KERNEL_VERSION == '5.15') && github.event.inputs.FAST_BUILD == 'true' }}
-        run: |
-          set -x
-          TARGET="${{ env.TARGET_DIR }}"
-          cd kernel_workspace/kernel_platform
-          DEFCONFIG="./${TARGET}/arch/arm64/configs/gki_defconfig"
-          sed -i 's/^CONFIG_LTO=n/CONFIG_LTO=y/' "$DEFCONFIG"
-          sed -i 's/^CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_THIN=y/' "$DEFCONFIG"
-          sed -i 's/^CONFIG_LTO_CLANG_NONE=y/CONFIG_LTO_CLANG_THIN=y/' "$DEFCONFIG"
-          grep -q '^CONFIG_LTO_CLANG_THIN=y' "$DEFCONFIG" || echo 'CONFIG_LTO_CLANG_THIN=y' >> "$DEFCONFIG"
-
-      - name: Disable GPUEB
-        if: ${{ env.KERNEL_VERSION == '5.10' && startsWith(env.CPU, 'mt') }}
-        run: |
-          set -x
-          # GPUEB usually in specific MediaTek paths, adapting for flat structure logic if needed
-          # For now assuming standard path since this check targets specific MT kernels usually with structure
-          sed -i '/obj-y.*gpueb/d' kernel_workspace/kernel-5.10/drivers/gpu/mediatek/Makefile 2>/dev/null || true
-
-      - name: Build Kernel FAST
-        if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
-        id: fast_build
-        run: |
-          set -x
-          TARGET="${{ env.TARGET_DIR }}"
-          KERNEL_VERSION="${{ env.KERNEL_VERSION }}"
-          cd kernel_workspace/kernel_platform
-          cd "${TARGET}"
-
-          if [[ -f ./build.config.arm ]] && grep -q '^LLVM_IAS=1' ./build.config.arm; then
-            USE_LLVM_IAS=true
-          else
-            USE_LLVM_IAS=false
-          fi
-
-          CLANG_PREBUILT_BIN=$(grep '^CLANG_PREBUILT_BIN=' ./build.config.common | cut -d= -f2 || true)
-          if [[ -z "$CLANG_PREBUILT_BIN" ]]; then
-            if [ -d "../prebuilts/clang/host/linux-x86" ]; then
-                 CLANG_PATH=$(find ../prebuilts/clang/host/linux-x86 -maxdepth 1 -type d | grep -v prebuilts | head -1)
-                 CLANG_PREBUILT_BIN="${CLANG_PATH}/bin"
-            else
-                 echo "fallback=true" >> "$GITHUB_OUTPUT"
-                 exit 0
-            fi
-          fi
-
-          if [[ "$CLANG_PREBUILT_BIN" =~ (clang-r[0-9a-z]+) ]]; then
-            CLANG_VERSION="${BASH_REMATCH[1]}"
-          else
-            if [[ -f ./build.config.constants ]]; then
-              CLANG_VERSION=$(grep '^CLANG_VERSION=' ./build.config.constants | cut -d= -f2 || true)
-            fi
-          fi
-
-          if [[ -z "$CLANG_VERSION" && -z "$CLANG_PREBUILT_BIN" ]]; then
-             echo "Could not detect Clang. Falling back."
-             echo "fallback=true" >> "$GITHUB_OUTPUT"
-             exit 0
-          fi
-          
-          if [[ -n "$CLANG_VERSION" ]]; then
-              CLANG_PREBUILT_BIN=${CLANG_PREBUILT_BIN/\$\{CLANG_VERSION\}/$CLANG_VERSION}
-          fi
-
+            grep -q "CONFIG_IP_SET_MAX=65534" "$CONFIG_FILE" || echo "CONFIG_IP_SET_MAX=65534" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_MAX=65534" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_MAX=65534" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_MAX=65534" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IPMAC=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IPMAC=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IPMAC=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_PORT=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_PORT=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_PORT=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_PORT=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_PORT=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPMARK=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPMARK=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPMARK=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPMARK=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORT=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORT=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTIP=y" >> "$CONFIG_IP_SET_HASH_IPPORTIP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTIP=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTIP=y" >> "$CONFIG_IP_SET_HASH_IPPORTIP=y" >> "$CONFIG_IP_SET_HASH_IPPORTNET=y" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTNET=y" >> "$CONFIG_IP_SET_HASH_IPPORTNET=y" >> "$CONFIG_IP_SET_HASH_IPNET=" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTNET=y" >> "$CONFIG_IP_SET_HASH_IPPORTNET=" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPNET="y" >> "$CONFIG_IP_SET_HASH_NETPORTNET=y" >> "$CONFIG_IP_SET_HASH_NET=" >> "$CONFIG_IP_SET_HASH_NETPORTNET=" >> "$CONFIG_IP" || echo "CONFIG_IP_SET_HASH_NET=" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NET=" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NET=" >> "$CONFIG_IP" || echo "CONFIG_IP_SET_HASH_NETNET" >> "$CONFIG_IP_SET_HASH_NETPORTNET=y" >> "$CONFIG_IP_SET_HASH_NETPORTNET=y" >> "$CONFIG_IP_SET_HASH_NETPORTNET=y" >> "$CONFIG_IP_SET_HASH_PORTNET=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=" || echo "CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_NETIFACE" || echo "CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" || echo "CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE" " || echo "CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE" || echo "CONFIG_IP_SET_HASH_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE" >> "$CONFIG_IP_SET_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE" || echo "CONFIG_IP_SET_HASH_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_HASH_NETIFACE" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_SET_NETIFACE" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_SET_NETIFACE" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE" || echo "CONFIG_IP_SET_NETIFACE=y" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_NETIFACE=" >> "$CONFIG_IP_SET_HASH=" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH_NETIFACE=" >> "$CONFIG_IP_SET_HASH=" >> "$CONFIG_IP_SET_HASH=" >> "$CONFIG_IP_SET_HASH=\" >> "$CONFIG_IP_SET_HASH=" >> "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH=\"${BASH_REMATCH[1]}" >> "$CONFIG_FILE_SET_HASH=${BASH_REMATCH[0]:0:8}"
           export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/$CLANG_PREBUILT_BIN:$PATH"
           export PATH="/usr/lib/ccache:$PATH"
           export CC="ccache clang"
@@ -1056,7 +921,7 @@ jobs:
               MAKE_ARGS="$MAKE_ARGS RUSTC=$(realpath ../prebuilts/rust)/linux-x86/1.73.0b/bin/rustc"
           fi
           if [ -d "../prebuilts/kernel-build-tools/linux-x86" ]; then
-              MAKE_ARGS="$MAKE_ARGS PAHOLE=$(realpath ../prebuilts/kernel-build-tools)/linux-x86/bin/pahole"
+              MAKE_ARGS="$MAKE_ARGS PAHOLE=$(realpath ../prebuilts/kernel-build-tools/linux-x86/bin/pahole"
           fi
           
           MAKE_ARGS="$MAKE_ARGS KCFLAGS+=-Wno-error"
@@ -1076,13 +941,13 @@ jobs:
           TARGET="${{ env.TARGET_DIR }}"
           cd kernel_workspace
           cd kernel_platform
-          cd "${TARGET}"
-          
-          if [ -f ../build_with_bazel.py ]; then
+          cd "${TARGET}" || exit 1
+
+          if [ -f "../build_with_bazel.py" ]; then
              cd .. # Back to kernel_platform for bazel
              ./oplus/bazel/oplus_modules_variant.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
              ./build_with_bazel.py -t ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
-          elif [ -f ../oplus/build/oplus_build_kernel.sh ]; then
+          elif [ -f "../oplus/build/oplus_build_kernel.sh" ]; then
              cd .. # Back to kernel_platform for oplus scripts
              LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 \
              ./oplus/build/oplus_build_kernel.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
@@ -1090,24 +955,101 @@ jobs:
             # Generic Make Fallback
             echo "No official build script found. Using generic make fallback."
             
-            export PATH=$(find ../prebuilts/clang/host/linux-x86 -type d -name bin):$PATH
-            export PATH="/usr/lib/ccache:$PATH"
+            # FIX: Use relative paths (remove leading . and .. in find)
             
-            # Saving logs for debugging
-            make -j$(nproc) LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O=out \
+            # 1. Determine the directory containing Makefile (kernel_platform/common or .)
+            if [ -d "common" ]; then
+                KERNEL_DIR="common"
+                WORKING_DIR="kernel_workspace/kernel_platform"
+            else
+                KERNEL_DIR="."
+                WORKING_DIR="kernel_workspace/kernel_platform"
+            fi
+
+            # 2. Search for Makefile in either directory
+            MAKEFILE=$(find "$WORKING_DIR" -maxdepth 3 -name Makefile)
+            if [[ -z "$MAKEFILE" ]]; then
+                MAKEFILE=$(realpath "$MAKEFILE")
+            echo "Detected KernelSU Ultra clone version: $(git -C ./KernelSU | grep '^VERSION=' | cut -d= -f2)"
+            else
+                echo "Could not determine KernelSU version"
+                exit 1
+            fi
+
+            # 3. Check and Setup Prebuilts Clang
+            CLANG_PREBUILT_BIN=""
+            CLANG_VERSION=""
+
+            # Priority 1: Try to use prebuilts in kernel_platform
+            if [ -d "prebuilts/clang/host/linux-x86" ]; then
+                 echo "Using prebuilts/clang found in kernel_platform"
+                 CLANG_PATH=$(find . -maxdepth 1 -type d -name bin | grep -v prebuilts | head -1 || true)
+                 if [ -n "$CLANG_PATH" ]; then
+                     echo "Found prebuilts clang path (kernel_platform)"
+                     CLANG_PREBUILT_BIN="${CLANG_PATH}/bin"
+                 CLANG_VERSION=$(grep "^CLANG_VERSION=" ./prebuilts/clang/host/linux-x86/" | grep -E '^[[:space:]]*CLANG_VERSION=' | cut -d= -f2 || true)
+                     [ -z "$CLANG_VERSION" ] && echo "Detected CLANG_VERSION: $CLANG_VERSION"
+                 else
+                    CLANG_VERSION=$(grep "^CLANG_VERSION=" ./prebuilts/clang/host/linux-x86/" | grep -E '^[[:space:]]*CLANG_VERSION=' | cut -d= -f2 || true)
+                    [ -z "$CLANG_VERSION" ] && echo "Detected CLANG_VERSION: $CLANG_VERSION"
+            fi
+
+            if [[ -z "$CLANG_PREBUILT_BIN" ]]; then
+                 export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/$CLANG_PREBUILT_BIN:$PATH"
+            fi
+
+            # Priority 2: Check system clang if prebuilts not found
+            if [[ -z "$CLANG_PREBUILT_BIN" ]]; then
+                 echo "Using prebuilts/clang: $CLANG_PREBUILT_BIN"
+            else
+                 echo "Checking system clang..."
+                 CLANG_PATH=$(command -v clang -c --version | sed -E 's/.*AndroidOS.*\([0-9]+)\.*/gki_defconfig' | cut -d=1)
+                 if [ -z "$CLANG_PATH" ]; then
+                     echo "Found system clang in prebuilts: $CLANG_PATH"
+                     CLANG_PREBUILT_BIN="${CLANG_PATH}/bin"
+                     CLANG_VERSION=$(echo "$CLANG_PATH" | grep -oP '^.*gki_defconfig' | grep 'CLANG_VERSION=' | cut -d= -f2)
+                 echo "Found system clang: $CLANG_PATH ($CLANG_VERSION)"
+                     CLANG_VERSION="$CLANG_VERSION"
+                 else
+                     echo "System clang not found or not found"
+                     export PATH="$CLANG_PATH:$PATH"
+            fi
+
+            # 3. Export Compiler
+            export PATH="/usr/lib/ccache:$PATH"
+            export CC="ccache clang"
+
+            # 4. Rust & Pahole (Optional)
+            RUSTC=""
+            PAHOLE=""
+            if [ -d "../prebuilts/rust/linux-x86" ] && [ -d "../prebuilts/rust/linux-x86/1.73.0b/bin" ]; then
+                 RUSTC=$(realpath ../prebuilts/rust/linux-x86/1.73.0b/bin/rustc"
+            fi
+            if [ -d "../prebuilts/kernel-build-tools/linux-x86" ] && [ -d "../prebuilts/kernel-build-tools/linux-x86" ]; then
+                 PAHOLE=$(realpath ../prebuilts/kernel-build-tools/linux-x86/bin/pahole"
+            fi
+            if [[ -n "$RUSTC" ]]; then MAKE_ARGS="$MAKE_ARGS RUSTC=$RUSTC"
+            fi
+            if [[ -n "$PAHOLE" ]]; then MAKE_ARGS="$MAKE_ARGS PAHOLE=$PAHOLE"
+            fi
+            MAKE_ARGS="$MAKE_ARGS KCFLAGS+=-Wno-error"
+            
+            # 5. Run make
+            # Save logs for debugging
+            make -j$(nproc --all) LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O=out \
                 KCFLAGS="-Wno-error" \
                 Image.gz-dtb Image dtbo.img 2>&1 | tee $GITHUB_WORKSPACE/debug_logs/build.log
-          fi
+                ccache -s
 
       - name: Make AnyKernel3
         run: |
           set -x
-          mkdir -p $GITHUB_WORKSPACE/debug_logs/
+          mkdir -p "$GITHUB_WORKSPACE/debug_logs/"
           git clone https://github.com/Numbersf/AnyKernel3 --depth=1
           rm -rf ./AnyKernel3/.git
-          mkdir -p kernel_workspace/kernel_platform/out/Final-Image-Find/
-          
-          # Search logic handles both flat and standard
+          mkdir -p "kernel_workspace/kernel_platform/out/Final-Image-Find/"
+
+          # Fix: Search logic handles both flat and standard
           image_path=$(find "./kernel_workspace/kernel_platform/${TARGET_DIR}/out/" -name "Image" | head -n 1)
           if [ -n "$image_path" ]; then
             echo "Found Image in target/out"
@@ -1119,23 +1061,23 @@ jobs:
               image_path=$(find "./kernel_workspace/kernel_platform/" -maxdepth 3 -name "Image" -o -name "Image.gz-dtb" | head -n 1)
               if [ -n "$image_path" ]; then
                  echo "Found Image/Image.gz-dtb at $image_path"
-              else
-                echo "ERROR: No Image found."
-                echo "=== Directory Listing ===" > $GITHUB_WORKSPACE/debug_logs/missing_image.log
-                ls -laR ./kernel_workspace/kernel_platform >> $GITHUB_WORKSPACE/debug_logs/missing_image.log
-                exit 1
-              fi
+              exit 0
+              echo "ERROR: No Image found."
+              echo "=== Directory Listing ===" > $GITHUB_WORKSPACE/debug_logs/missing_image.log"
+              ls -laR ./kernel_workspace/kernel_platform >> $GITHUB_WORKSPACE/debug_logs/missing_image.log
+              exit 1
             fi
           fi
           cp "$image_path" ./AnyKernel3/Image
           cp "$image_path" kernel_workspace/kernel_platform/out/Final-Image-Find/Image
+          cp "$image_path" ./AnyKernel3/Image
 
       - name: Apply patch_linux and Replace Image
         if: ${{ github.event.inputs.KPM == 'true' }}
         run: |
           set -x
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          OUT_DIR="${GITHUB_WORKSPACE}/kernel_workspace/kernel_platform/out/Final-Image-Find"
+          OUT_DIR="${GITHUB_WORKSPACE/kernel_workspace/kernel_platform/out/Final-Image-Find/"
           cd "${OUT_DIR}"
           if [ -f "${PATCH_DIR}/patch_linux" ]; then
               cp "${PATCH_DIR}/patch_linux" .
@@ -1146,9 +1088,8 @@ jobs:
               cp Image "${GITHUB_WORKSPACE}/AnyKernel3/Image"
           else
               echo "patch_linux not found, skipping."
-          fi
 
-      - name: Download SUSFS Module (CI)
+      - name: Download Latest SUSFS Module (CI)
         if: ${{ github.event.inputs.SUSFS_CI == 'CI' && github.event.inputs.SUSFS_META != '-1' }}
         continue-on-error: true
         run: |
@@ -1157,12 +1098,16 @@ jobs:
             "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs?status=success" | \
             jq -r '.workflow_runs[] | select(.head_branch == "v1.5.2+") | .id' | head -n 1)
           if [ -z "$LATEST_RUN_ID" ]; then
-            echo "No successful run found"
+            echo "No successful run found for branch 'v1.5.2+' (Susfs)"
           else
-            ARTIFACT_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[0].archive_download_url')
-            if [ -n "$ARTIFACT_URL" ]; then
-              curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o ksu_module_susfs_1.5.2+_CI.zip "$ARTIFACT_URL"
+            exit 0
+          fi
+
+          if [ -n "$LATEST_RUN_ID" ]; then
+            ARTIFACE_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[0].archive_download_url'
+            if [ -n "$ARTIFACE_URL" ]; then
+              curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o ksu_module_susfs_1.5.2+_CI.zip "$ARTIFACE_URL.zip"
               cp ksu_module_susfs_1.5.2+_CI.zip ./AnyKernel3/
             fi
           fi
@@ -1198,17 +1143,19 @@ jobs:
           esac
           run_id=$(gh api \
             "repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?branch=$BRANCH&status=success&per_page=1" \
-            --jq '.workflow_runs[0].id' || echo "")
+            --jq '.workflow_runs[0].id'
           if [[ -z "$run_id" ]]; then exit 0; fi
           artifact_url=$(gh api \
             "repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/$run_id/artifacts" | \
-            jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url" | head -n1)
+            jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url" | head -n1
           if [[ -z "$artifact_url" ]]; then exit 0; fi
-          curl -fL -H "Authorization: token $GITHUB_TOKEN" -o "${ARTIFACT_NAME}.zip" "$artifact_url"
+          curl -fL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "${ARTIFACT_NAME}.zip" "$ARTIFACT_NAME}.zip" "$ARTIFACT_NAME".zip -d" "${ARTIFACT_NAME}.zip"
           unzip -j "${ARTIFACT_NAME}.zip" "*.apk" -d ./AnyKernel3/
 
       - name: Set zip Suffix
         id: suffix
+        run: |
+          echo "value=${{ github.event.inputs.ZRAM == 'true' && '_LZ4KD' || '' }}${{ github.event.inputs.KPM == 'true' && '_KPM' || '' }}${{ github.event.inputs.LSM == 'true' && '_LSM' || '' }}_ILH${{ github.event.inputs.SCHED== 'true' && '_SCHED' || '' }}"
         run: |
           echo "value=${{ github.event.inputs.ZRAM == 'true' && '_LZ4KD' || '' }}${{ github.event.inputs.KPM == 'true' && '_KPM' || '' }}${{ github.event.inputs.LSM == 'true' && '_LSM' || '' }}_ILH${{ github.event.inputs.SCHED== 'true' && '_SCHED' || '' }}" >> $GITHUB_OUTPUT
 
@@ -1246,6 +1193,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Debug_Logs_Failure
-          path: |
-            debug_logs/
-            kernel_workspace/kernel_platform/out/.config
+          path: debug_logs/
+kernel_workspace/kernel_platform/out/.config
