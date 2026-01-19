@@ -429,13 +429,30 @@ jobs:
             rm -f "$dir/android/abi_gki_protected_exports_"* 2>/dev/null || echo "No protected exports in $dir"
           done
 
-      - name: Kernel Version Handling
+      - name: Detect Kernel Structure (Flat vs Standard)
+        id: detect_structure
         run: |
           set -x
           cd kernel_workspace/kernel_platform
+          # Check if standard "common" subdirectory exists
+          if [ -d "common" ]; then
+            echo "Detected Standard Multi-Repo Structure (kernel_platform/common/)"
+            echo "TARGET_DIR=common" >> $GITHUB_ENV
+            echo "IS_FLAT=false" >> $GITHUB_ENV
+          else
+            echo "Detected Flat/Direct Clone Structure (kernel_platform/)"
+            echo "TARGET_DIR=." >> $GITHUB_ENV
+            echo "IS_FLAT=true" >> $GITHUB_ENV
+          fi
+
+      - name: Kernel Version Handling
+        run: |
+          set -x
+          TARGET="${{ env.TARGET_DIR }}"
+          cd kernel_workspace/kernel_platform
           
           # Check build.config for standard kernels
-          for f in ./common/build.config.constants ./common/build.config.common; do
+          for f in ./${TARGET}/build.config.constants ./${TARGET}/build.config.common; do
             if [ -f "$f" ]; then
               BRANCH=$(grep -m1 '^BRANCH=' "$f" | cut -d= -f2)
               [ -n "$BRANCH" ] && break
@@ -447,22 +464,23 @@ jobs:
             echo "KERNEL_VERSION=${BRANCH#*-}" >> $GITHUB_ENV
           else
             echo "No BRANCH found in build.config files. Fallback detection..."
-            # Simple fallback for direct clone kernels (Dodge)
+            # Fallback for flat kernels (Dodge)
             VERSION=$(make -s kernelversion | cut -d'-' -f1 2>/dev/null || echo "unknown")
             echo "KANDROID_VERSION=16" >> $GITHUB_ENV 
           fi
 
-          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+          # Adjust Makefile path based on structure
+          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./${TARGET}/Makefile)
 
           SUBLEVEL_INPUT="${{ github.event.inputs.SUBLEVEL }}"
           if [ -n "$SUBLEVEL_INPUT" ]; then
             echo "Modifying SUBLEVEL to $SUBLEVEL_INPUT"
-            sed -i "s/^\(SUBLEVEL[[:space:]]*=[[:space:]]*\).*/\1$SUBLEVEL_INPUT/" ./common/Makefile
+            sed -i "s/^\(SUBLEVEL[[:space:]]*=[[:space:]]*\).*/\1$SUBLEVEL_INPUT/" ./${TARGET}/Makefile
           else
             echo "SUBLEVEL not specified, keeping default."
           fi
 
-          NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+          NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./${TARGET}/Makefile)
 
           if [ "$ORIG_VERSION" != "$NEW_VERSION" ]; then
             echo "Kernel Version Changed: $ORIG_VERSION -> $NEW_VERSION"
@@ -481,15 +499,17 @@ jobs:
         if: ${{ github.event.inputs.SUFFIX != '' }}
         run: |
           set -x
-          cd kernel_workspace
+          cd kernel_workspace/kernel_platform
+          TARGET="${{ env.TARGET_DIR }}"
           SUFFIX="${{ github.event.inputs.SUFFIX }}"
           KANDROID_VERSION="${{ env.KANDROID_VERSION }}"
           FAST_BUILD="${{ github.event.inputs.FAST_BUILD }}"
 
           for path in \
-            kernel_platform/common/scripts/setlocalversion \
-            kernel_platform/msm-kernel/scripts/setlocalversion \
-            kernel_platform/external/dtc/scripts/setlocalversion; do
+            ./${TARGET}/scripts/setlocalversion \
+            ./msm-kernel/scripts/setlocalversion \
+            ./external/dtc/scripts/setlocalversion \
+            ./scripts/setlocalversion; do # Added root path for flat kernels
 
             [ -f "$path" ] || continue
 
@@ -505,7 +525,7 @@ jobs:
               if [ "$FAST_BUILD" = "true" ]; then
                 sed -i "s/^res=.*/res=\"-${KANDROID_VERSION}-${SUFFIX}\"/" "$path"
               else
-                if [[ -f ./kernel_platform/build_with_bazel.py ]]; then
+                if [[ -f ./build_with_bazel.py ]]; then
                   echo "Using bazel build, character limit warning applies."
                 fi
                 tac "$path" | sed "0,/echo \"\\\$res\"/s//res=\\\$(echo \\\$res | cut -d- -f1-2)-${SUFFIX}; echo \"\\\$res\";/" | tac > "$path.tmp" && mv "$path.tmp" "$path"
@@ -523,7 +543,8 @@ jobs:
         if: ${{ github.event.inputs.SUFFIX == '' }}
         run: |
           set -x
-          cd kernel_workspace
+          cd kernel_workspace/kernel_platform
+          TARGET="${{ env.TARGET_DIR }}"
           KANDROID_VERSION="${{ env.KANDROID_VERSION }}"
           FAST_BUILD="${{ github.event.inputs.FAST_BUILD }}"
 
@@ -532,9 +553,10 @@ jobs:
           RANDOM_SUFFIX="${RANDOM_DIGIT}-o-g${RANDOM_HASH}"
 
           for path in \
-            kernel_platform/common/scripts/setlocalversion \
-            kernel_platform/msm-kernel/scripts/setlocalversion \
-            kernel_platform/external/dtc/scripts/setlocalversion; do
+            ./${TARGET}/scripts/setlocalversion \
+            ./msm-kernel/scripts/setlocalversion \
+            ./external/dtc/scripts/setlocalversion \
+            ./scripts/setlocalversion; do
 
             [ -f "$path" ] || continue
 
@@ -574,7 +596,6 @@ jobs:
 
           IFS='/' read -r BRANCH_NAME CUSTOM_TAG MANUAL_HASH <<< "$KSU_META"
 
-          # Check if KernelSU exists to avoid conflicts
           if [ -d "KernelSU" ]; then
             echo "KernelSU directory already exists. Attempting update..."
             cd KernelSU
@@ -652,9 +673,12 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/debug_logs/patch_rejections
           cd kernel_workspace
           
+          TARGET="${{ env.TARGET_DIR }}"
+          
           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
             SUSFS_META="${{ github.event.inputs.SUSFS_META }}"
-            if [ -f "kernel_platform/common/fs/susfs.c" ]; then
+            # Check existing in the target directory
+            if [ -f "kernel_platform/${TARGET}/fs/susfs.c" ]; then
                 echo "SUSFS already present in source, skipping clone."
             else
                 echo "Cloning SUSFS..."
@@ -669,12 +693,12 @@ jobs:
           cd kernel_platform
           
           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
-            if [ ! -f "./common/fs/susfs.c" ]; then
-                echo "Applying SUSFS files..."
-                cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch ./common/ || echo "Patch file not found for version"
-                if [ -f "./common/50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" ]; then
-                    cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
-                    cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+            if [ ! -f "${TARGET}/fs/susfs.c" ]; then
+                echo "Applying SUSFS files to ${TARGET}..."
+                cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch ./${TARGET}/ || echo "Patch file not found for version"
+                if [ -f "./${TARGET}/50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" ]; then
+                    cp ../susfs4ksu/kernel_patches/fs/* ./${TARGET}/fs/
+                    cp ../susfs4ksu/kernel_patches/include/linux/* ./${TARGET}/include/linux/
                 fi
             else
                 echo "Skipping SUSFS file copy, files exist."
@@ -682,18 +706,18 @@ jobs:
           fi
 
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
-            if [ -f "./common/crypto/lz4k.c" ]; then
+            if [ -f "${TARGET}/crypto/lz4k.c" ]; then
                 echo "ZRAM/LZ4K already present, skipping."
             else
-                echo "Applying ZRAM files..."
-                cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux/
-                cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib/
-                cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto/
-                cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
+                echo "Applying ZRAM files to ${TARGET}..."
+                cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./${TARGET}/include/linux/
+                cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./${TARGET}/lib/
+                cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./${TARGET}/crypto/
+                cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./${TARGET}/lib/
             fi
           fi
 
-          cd ./common
+          cd "${TARGET}"
           GKI_V="${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}"
           SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | head -n1 | cut -d= -f2 | tr -d ' ')
 
@@ -705,7 +729,11 @@ jobs:
 
           if [[ "${{ env.KV2 }}" == "66" && "${{ env.KV3 }}" -le 6630 && "${{ github.event.inputs.SUSFS_META }}" != "-1" ]]; then
             TRUSTY_EXISTS="false"
-            if grep -q 'common-modules/trusty' "$GITHUB_WORKSPACE/.repo/manifests_fallback/${FILE}.xml"; then
+            if [ "${{ env.IS_FLAT }}" == "true" ]; then
+                # Flat kernels usually don't have separate manifests or trusty defined the same way, assuming false for now
+                # or we check if kernel-modules/trusty exists
+                if [ -d "../kernel_modules/trusty" ]; then TRUSTY_EXISTS="true"; fi
+            elif grep -q 'common-modules/trusty' "$GITHUB_WORKSPACE/.repo/manifests_fallback/${FILE}.xml"; then
               TRUSTY_EXISTS="true"
             fi
             if [[ "$TRUSTY_EXISTS" == "false" ]]; then
@@ -736,11 +764,14 @@ jobs:
         if: ${{ fromJSON(env.KV1) >= 6 && fromJSON(env.KV2) >= 66 && github.event.inputs.SCHED == 'false' }}
         run: |
           set -x
+          TARGET="${{ env.TARGET_DIR }}"
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          cd kernel_workspace/kernel_platform/common
-          for p in ./kernel/sched/hmbird* ./vendor/oplus/kernel/cpu/sched_ext/hmbird*; do
+          cd kernel_workspace/kernel_platform
+          # Check in target dir
+          for p in ./${TARGET}/kernel/sched/hmbird* ./vendor/oplus/kernel/cpu/sched_ext/hmbird* ./${TARGET}/kernel/sched/hmbird*; do
             [ -d "$p" ] && { echo "HMBIRD code exists, skipping."; exit 0; }
           done
+          cd "${TARGET}"
           sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
           patch -p1 -F 3 < "${PATCH_DIR}/hmbird_patch.patch" || true
 
@@ -748,8 +779,10 @@ jobs:
         if: ${{ github.event.inputs.UNICODE_BYPASS == 'true' }}
         run: |
           set -x
+          TARGET="${{ env.TARGET_DIR }}"
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          cd kernel_workspace/kernel_platform/common
+          cd kernel_workspace/kernel_platform
+          cd "${TARGET}"
           if [ "$KV1" -lt 6 ]; then
             patch -p1 --dry-run --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1-.patch" && patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1-.patch" || echo "Unicode patch skipped"
           else
@@ -760,8 +793,10 @@ jobs:
         if: ${{ github.event.inputs.ZRAM == 'true' }}
         run: |
           set -x
+          TARGET="${{ env.TARGET_DIR }}"
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/SukiSU_patch/other/zram/zram_patch/${{ env.KERNEL_VERSION }}"
-          cd kernel_workspace/kernel_platform/common
+          cd kernel_workspace/kernel_platform
+          cd "${TARGET}"
           if [ ! -f "crypto/lz4k.c" ]; then
              echo "Patching lz4kd..."
              patch -p1 -F 3 < "${PATCH_DIR}/lz4kd.patch" || true
@@ -777,7 +812,9 @@ jobs:
         if: ${{ github.event.inputs.SCHED == 'true' }}
         run: |
           set -x
-          cd kernel_workspace/kernel_platform/common
+          TARGET="${{ env.TARGET_DIR }}"
+          cd kernel_workspace/kernel_platform
+          cd "${TARGET}"
           if [ -d "kernel/sched/fengchi" ]; then
               echo "Fengchi/SCHED already exists. Skipping."
               exit 0
@@ -800,7 +837,9 @@ jobs:
         if: ${{ github.event.inputs.LSM == 'true' }}
         run: |
           set -x
-          cd kernel_workspace/kernel_platform/common
+          TARGET="${{ env.TARGET_DIR }}"
+          cd kernel_workspace/kernel_platform
+          cd "${TARGET}"
           if [ -d "security/baseband_guard" ]; then
               echo "Baseband Guard (LSM) already exists. Skipping."
           else
@@ -812,8 +851,10 @@ jobs:
       - name: Add Configuration Settings
         run: |
           set -x
-          cd kernel_workspace/kernel_platform/common
-          CONFIG_FILE=./arch/arm64/configs/gki_defconfig
+          TARGET="${{ env.TARGET_DIR }}"
+          cd kernel_workspace/kernel_platform
+          
+          CONFIG_FILE="./${TARGET}/arch/arm64/configs/gki_defconfig"
           KERNEL_VERSION="${{ env.KERNEL_VERSION }}"
 
           if [ ! -f "$CONFIG_FILE" ]; then
@@ -873,7 +914,22 @@ jobs:
             grep -q "CONFIG_NETFILTER_XT_SET=y" "$CONFIG_FILE" || echo "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_IP_SET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_IP_SET_MAX=65534" "$CONFIG_FILE" || echo "CONFIG_IP_SET_MAX=65534" >> "$CONFIG_FILE"
-            # ... (Adding all IPSET configs here for brevity in thought process, kept in file)
+            grep -q "CONFIG_IP_SET_BITMAP_IP=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IP=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_BITMAP_IPMAC=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_IPMAC=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_BITMAP_PORT=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_BITMAP_PORT=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_IP=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IP=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_IPMARK=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPMARK=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_IPPORT=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORT=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_IPPORTIP=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTIP=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_IPPORTNET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPPORTNET=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_IPMAC=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_IPMAC=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_MAC=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_MAC=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_NETPORTNET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NETPORTNET=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_NET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NET=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_NETNET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NETNET=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_NETPORT=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NETPORT=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_HASH_NETIFACE=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_HASH_NETIFACE=y" >> "$CONFIG_FILE"
+            grep -q "CONFIG_IP_SET_LIST_SET=y" "$CONFIG_FILE" || echo "CONFIG_IP_SET_LIST_SET=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_IP6_NF_NAT=y" "$CONFIG_FILE" || echo "CONFIG_IP6_NF_NAT=y" >> "$CONFIG_FILE"
             grep -q "CONFIG_IP6_NF_TARGET_MASQUERADE=y" "$CONFIG_FILE" || echo "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> "$CONFIG_FILE"
           fi
@@ -881,14 +937,16 @@ jobs:
           if [ "$KERNEL_VERSION" = "6.1" ] && [[ "$CPU" == mt* ]]; then
             echo "CONFIG_DEBUG_INFO_BTF=n" >> "$CONFIG_FILE"
           fi
-          sed -i 's/check_defconfig//' ./build.config.gki 2>/dev/null || true
+          sed -i 's/check_defconfig//' ./${TARGET}/build.config.gki 2>/dev/null || true
 
       - name: Fix IPv6_NAT Error
         if: ${{ github.event.inputs.NETFILTER == 'true' }}
         run: |
           set -x
+          TARGET="${{ env.TARGET_DIR }}"
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          cd kernel_workspace/kernel_platform/common
+          cd kernel_workspace/kernel_platform
+          cd "${TARGET}"
           if [[ "${CPU}" == sm* ]]; then
             patch -p1 --dry-run -F 3 < "${PATCH_DIR}/IPv6_NAT_FIX.patch" && patch -p1 -F 3 < "${PATCH_DIR}/IPv6_NAT_FIX.patch" || echo "IPv6 Fix skipped"
           fi
@@ -906,7 +964,7 @@ jobs:
           echo "KBUILD_BUILD_TIMESTAMP=${DATESTR}" >> "$GITHUB_ENV"
           echo "KBUILD_BUILD_VERSION=1" >> "$GITHUB_ENV"
           cd kernel_workspace/kernel_platform/
-          for f in common/scripts/mkcompile_h msm-kernel/scripts/mkcompile_h; do
+          for f in ./${TARGET}/scripts/mkcompile_h ./msm-kernel/scripts/mkcompile_h; do
             if [ -f "$f" ]; then
               if grep -q 'UTS_VERSION=' "$f"; then
                 perl -pi -e "s{UTS_VERSION=\"\\\$\\(.*?\\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $DATESTR\"}" "$f"
@@ -920,8 +978,9 @@ jobs:
         if: ${{ (env.KERNEL_VERSION == '5.10' || env.KERNEL_VERSION == '5.15') && github.event.inputs.FAST_BUILD == 'true' }}
         run: |
           set -x
+          TARGET="${{ env.TARGET_DIR }}"
           cd kernel_workspace/kernel_platform
-          DEFCONFIG=./common/arch/arm64/configs/gki_defconfig
+          DEFCONFIG="./${TARGET}/arch/arm64/configs/gki_defconfig"
           sed -i 's/^CONFIG_LTO=n/CONFIG_LTO=y/' "$DEFCONFIG"
           sed -i 's/^CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_THIN=y/' "$DEFCONFIG"
           sed -i 's/^CONFIG_LTO_CLANG_NONE=y/CONFIG_LTO_CLANG_THIN=y/' "$DEFCONFIG"
@@ -931,6 +990,8 @@ jobs:
         if: ${{ env.KERNEL_VERSION == '5.10' && startsWith(env.CPU, 'mt') }}
         run: |
           set -x
+          # GPUEB usually in specific MediaTek paths, adapting for flat structure logic if needed
+          # For now assuming standard path since this check targets specific MT kernels usually with structure
           sed -i '/obj-y.*gpueb/d' kernel_workspace/kernel-5.10/drivers/gpu/mediatek/Makefile 2>/dev/null || true
 
       - name: Build Kernel FAST
@@ -938,19 +999,21 @@ jobs:
         id: fast_build
         run: |
           set -x
+          TARGET="${{ env.TARGET_DIR }}"
           KERNEL_VERSION="${{ env.KERNEL_VERSION }}"
           cd kernel_workspace/kernel_platform
+          cd "${TARGET}"
 
-          if [[ -f ./common/build.config.arm ]] && grep -q '^LLVM_IAS=1' ./common/build.config.arm; then
+          if [[ -f ./build.config.arm ]] && grep -q '^LLVM_IAS=1' ./build.config.arm; then
             USE_LLVM_IAS=true
           else
             USE_LLVM_IAS=false
           fi
 
-          CLANG_PREBUILT_BIN=$(grep '^CLANG_PREBUILT_BIN=' ./common/build.config.common | cut -d= -f2 || true)
+          CLANG_PREBUILT_BIN=$(grep '^CLANG_PREBUILT_BIN=' ./build.config.common | cut -d= -f2 || true)
           if [[ -z "$CLANG_PREBUILT_BIN" ]]; then
-            if [ -d "./prebuilts/clang/host/linux-x86" ]; then
-                 CLANG_PATH=$(find ./prebuilts/clang/host/linux-x86 -maxdepth 1 -type d | grep -v prebuilts | head -1)
+            if [ -d "../prebuilts/clang/host/linux-x86" ]; then
+                 CLANG_PATH=$(find ../prebuilts/clang/host/linux-x86 -maxdepth 1 -type d | grep -v prebuilts | head -1)
                  CLANG_PREBUILT_BIN="${CLANG_PATH}/bin"
             else
                  echo "fallback=true" >> "$GITHUB_OUTPUT"
@@ -961,8 +1024,8 @@ jobs:
           if [[ "$CLANG_PREBUILT_BIN" =~ (clang-r[0-9a-z]+) ]]; then
             CLANG_VERSION="${BASH_REMATCH[1]}"
           else
-            if [[ -f ./common/build.config.constants ]]; then
-              CLANG_VERSION=$(grep '^CLANG_VERSION=' ./common/build.config.constants | cut -d= -f2 || true)
+            if [[ -f ./build.config.constants ]]; then
+              CLANG_VERSION=$(grep '^CLANG_VERSION=' ./build.config.constants | cut -d= -f2 || true)
             fi
           fi
 
@@ -980,14 +1043,13 @@ jobs:
           export PATH="/usr/lib/ccache:$PATH"
           export CC="ccache clang"
           
-          cd ./common
           MAKE_ARGS="LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-"
 
-          if [ -d "../../prebuilts/rust/linux-x86" ]; then
-              MAKE_ARGS="$MAKE_ARGS RUSTC=$(realpath ../../prebuilts/rust)/linux-x86/1.73.0b/bin/rustc"
+          if [ -d "../prebuilts/rust/linux-x86" ]; then
+              MAKE_ARGS="$MAKE_ARGS RUSTC=$(realpath ../prebuilts/rust)/linux-x86/1.73.0b/bin/rustc"
           fi
-          if [ -d "../../prebuilts/kernel-build-tools/linux-x86" ]; then
-              MAKE_ARGS="$MAKE_ARGS PAHOLE=$(realpath ../../prebuilts/kernel-build-tools)/linux-x86/bin/pahole"
+          if [ -d "../prebuilts/kernel-build-tools/linux-x86" ]; then
+              MAKE_ARGS="$MAKE_ARGS PAHOLE=$(realpath ../prebuilts/kernel-build-tools)/linux-x86/bin/pahole"
           fi
           
           MAKE_ARGS="$MAKE_ARGS KCFLAGS+=-Wno-error"
@@ -1004,20 +1066,24 @@ jobs:
         if: ${{ github.event.inputs.FAST_BUILD == 'false' || steps.fast_build.outputs.fallback == 'true' }}
         run: |
           set -x
+          TARGET="${{ env.TARGET_DIR }}"
           cd kernel_workspace
+          cd kernel_platform
+          cd "${TARGET}"
           
-          if [ -f ./kernel_platform/build_with_bazel.py ]; then
-            ./kernel_platform/oplus/bazel/oplus_modules_variant.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
-            ./kernel_platform/build_with_bazel.py -t ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
-          elif [ -f ./kernel_platform/oplus/build/oplus_build_kernel.sh ]; then
-            LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 \
-            ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
+          if [ -f ../build_with_bazel.py ]; then
+             cd .. # Back to kernel_platform for bazel
+             ./oplus/bazel/oplus_modules_variant.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
+             ./build_with_bazel.py -t ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
+          elif [ -f ../oplus/build/oplus_build_kernel.sh ]; then
+             cd .. # Back to kernel_platform for oplus scripts
+             LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 \
+             ./oplus/build/oplus_build_kernel.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
           else
             # Generic Make Fallback
             echo "No official build script found. Using generic make fallback."
-            cd kernel_platform/common
             
-            export PATH=$(find ../../prebuilts/clang/host/linux-x86 -type d -name bin):$PATH
+            export PATH=$(find ../prebuilts/clang/host/linux-x86 -type d -name bin):$PATH
             export PATH="/usr/lib/ccache:$PATH"
             
             # Saving logs for debugging
@@ -1033,13 +1099,15 @@ jobs:
           git clone https://github.com/Numbersf/AnyKernel3 --depth=1
           rm -rf ./AnyKernel3/.git
           mkdir -p kernel_workspace/kernel_platform/out/Final-Image-Find/
-          image_path=$(find "./kernel_workspace/kernel_platform/common/out/" -name "Image" | head -n 1)
+          
+          # Search logic handles both flat and standard
+          image_path=$(find "./kernel_workspace/kernel_platform/${TARGET_DIR}/out/" -name "Image" | head -n 1)
           if [ -n "$image_path" ]; then
-            echo "Found Image in common/out"
+            echo "Found Image in target/out"
           else
             image_path=$(find "./kernel_workspace/kernel_platform/out/" -name "Image" | head -n 1)
             if [ -n "$image_path" ]; then
-              echo "Found Image in out/"
+              echo "Found Image in global out/"
             else
               image_path=$(find "./kernel_workspace/kernel_platform/" -maxdepth 3 -name "Image" -o -name "Image.gz-dtb" | head -n 1)
               if [ -n "$image_path" ]; then
