@@ -459,8 +459,23 @@ jobs:
             echo "KERNEL_VERSION=${BRANCH#*-}" >> $GITHUB_ENV
           else
             echo "No BRANCH found in build.config files. Fallback detection..."
-            VERSION=$(make -s kernelversion | cut -d'-' -f1 2>/dev/null || echo "unknown")
-            echo "KANDROID_VERSION=16" >> $GITHUB_ENV 
+            VERSION_FULL=$(make -s kernelversion 2>/dev/null || echo "6.12")
+            echo "Detected Version: $VERSION_FULL"
+            # For Dodge, manually set to 16 and 6.12 if fallback triggers, 
+            # or parse it from make output which is like "6.12.123-..."
+            
+            # Extract Major.Minor (e.g., 6.12)
+            KERNEL_VERSION_MAJ=$(echo "$VERSION_FULL" | cut -d'.' -f1,2)
+            
+            # Set Android Version based on Kernel Version if unknown, else default 16 for this target
+            # A16 = 6.12, A15 = 6.6, A14 = 6.1, A13 = 5.15/5.10
+            ANDROID_VER="16"
+            if [[ "$KERNEL_VERSION_MAJ" == "5.15" ]] || [[ "$KERNEL_VERSION_MAJ" == "5.10" ]]; then ANDROID_VER="13"; fi
+            if [[ "$KERNEL_VERSION_MAJ" == "6.1" ]]; then ANDROID_VER="14"; fi
+            if [[ "$KERNEL_VERSION_MAJ" == "6.6" ]]; then ANDROID_VER="15"; fi
+            
+            echo "KANDROID_VERSION=$ANDROID_VER" >> $GITHUB_ENV 
+            echo "KERNEL_VERSION=$KERNEL_VERSION_MAJ" >> $GITHUB_ENV
           fi
 
           ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./$SOURCE_DIR/Makefile)
@@ -483,7 +498,7 @@ jobs:
             echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
           fi
 
-          # KV1/KV2 fallback logic for version comparison
+          # KV1/KV2 fallback logic
           if [ -n "$BRANCH" ]; then
               echo "KV1=${BRANCH#*-}"       | cut -d. -f1 >> $GITHUB_ENV
               echo "KV2=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
@@ -674,13 +689,18 @@ jobs:
           cd kernel_workspace
           SOURCE_DIR="${{ env.KERNEL_SOURCE_DIR }}"
           
+          # SUSFS Branch Construction: gki-android{VERSION}-{KERNEL_VERSION}
+          # e.g., gki-android16-6.12
+          SUSFS_BRANCH="gki-android${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}"
+          echo "Targeting SUSFS Branch: $SUSFS_BRANCH"
+
           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
             SUSFS_META="${{ github.event.inputs.SUSFS_META }}"
             if [ -f "kernel_platform/$SOURCE_DIR/fs/susfs.c" ]; then
                 echo "SUSFS already present in source, skipping clone."
             else
                 echo "Cloning SUSFS..."
-                git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}${{ github.inputs.SUSFS_DEV == 'true' && '-dev' || '' }}
+                git clone https://gitlab.com/simonpunk/susfs4ksu.git -b $SUSFS_BRANCH${{ github.inputs.SUSFS_DEV == 'true' && '-dev' || '' }}
                 cd susfs4ksu
                 [ -n "$SUSFS_META" ] && git checkout "$SUSFS_META" || echo "Using latest SUSFS"
                 cd ..
