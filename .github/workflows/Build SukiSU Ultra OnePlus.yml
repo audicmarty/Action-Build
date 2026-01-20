@@ -398,7 +398,6 @@ jobs:
             echo "Cloning TheGeniusClub kernel directly..."
             mkdir kernel_workspace
             cd kernel_workspace
-            # Using depth 1 to save space, remove if full history needed
             git clone --depth=1 https://github.com/TheGeniusClub/android_kernel_common_oneplus_sm8750 kernel_platform
             echo "Clone completed. Listing top-level structure:"
             ls -la kernel_platform/
@@ -429,40 +428,52 @@ jobs:
             rm -f "$dir/android/abi_gki_protected_exports_"* 2>/dev/null || echo "No protected exports in $dir"
           done
 
+      - name: Detect Kernel Source Structure
+        id: detect_structure
+        run: |
+          set -x
+          cd kernel_workspace/kernel_platform
+          if [ -d "common" ]; then
+            echo "KERNEL_SOURCE_DIR=common" >> $GITHUB_ENV
+            echo "Detected GKI Repo Structure (Source in 'common/')"
+          else
+            echo "KERNEL_SOURCE_DIR=." >> $GITHUB_ENV
+            echo "Detected Flat Kernel Structure (Source in Root)"
+          fi
+
       - name: Kernel Version Handling
         run: |
           set -x
           cd kernel_workspace/kernel_platform
+          SOURCE_DIR="${{ env.KERNEL_SOURCE_DIR }}"
           
-          # Check build.config for standard kernels
-          for f in ./common/build.config.constants ./common/build.config.common; do
-            if [ -f "$f" ]; then
-              BRANCH=$(grep -m1 '^BRANCH=' "$f" | cut -d= -f2)
-              [ -n "$BRANCH" ] && break
-            fi
-          done
+          # Check build.config in source dir or root
+          if [ -f "./$SOURCE_DIR/build.config.constants" ]; then
+              BRANCH=$(grep -m1 '^BRANCH=' "./$SOURCE_DIR/build.config.constants" | cut -d= -f2)
+          elif [ -f "./$SOURCE_DIR/build.config.common" ]; then
+              BRANCH=$(grep -m1 '^BRANCH=' "./$SOURCE_DIR/build.config.common" | cut -d= -f2)
+          fi
 
           if [ -n "$BRANCH" ]; then
             echo "KANDROID_VERSION=${BRANCH%-*}" >> $GITHUB_ENV
             echo "KERNEL_VERSION=${BRANCH#*-}" >> $GITHUB_ENV
           else
             echo "No BRANCH found in build.config files. Fallback detection..."
-            # Simple fallback for direct clone kernels (Dodge)
             VERSION=$(make -s kernelversion | cut -d'-' -f1 2>/dev/null || echo "unknown")
             echo "KANDROID_VERSION=16" >> $GITHUB_ENV 
           fi
 
-          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./$SOURCE_DIR/Makefile)
 
           SUBLEVEL_INPUT="${{ github.event.inputs.SUBLEVEL }}"
           if [ -n "$SUBLEVEL_INPUT" ]; then
             echo "Modifying SUBLEVEL to $SUBLEVEL_INPUT"
-            sed -i "s/^\(SUBLEVEL[[:space:]]*=[[:space:]]*\).*/\1$SUBLEVEL_INPUT/" ./common/Makefile
+            sed -i "s/^\(SUBLEVEL[[:space:]]*=[[:space:]]*\).*/\1$SUBLEVEL_INPUT/" ./$SOURCE_DIR/Makefile
           else
             echo "SUBLEVEL not specified, keeping default."
           fi
 
-          NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+          NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./$SOURCE_DIR/Makefile)
 
           if [ "$ORIG_VERSION" != "$NEW_VERSION" ]; then
             echo "Kernel Version Changed: $ORIG_VERSION -> $NEW_VERSION"
@@ -472,9 +483,15 @@ jobs:
             echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
           fi
 
-          echo "KV1=${BRANCH#*-}"       | cut -d. -f1 >> $GITHUB_ENV
-          echo "KV2=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
-          echo "KV3=${NEW_VERSION}"     | tr -d '.' >> $GITHUB_ENV
+          # KV1/KV2 fallback logic for version comparison
+          if [ -n "$BRANCH" ]; then
+              echo "KV1=${BRANCH#*-}"       | cut -d. -f1 >> $GITHUB_ENV
+              echo "KV2=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
+          else
+              echo "KV1=${NEW_VERSION%%.*}" >> $GITHUB_ENV
+              echo "KV2=$(echo $NEW_VERSION | tr -d '.')" >> $GITHUB_ENV
+          fi
+          echo "KV3=$(echo $NEW_VERSION | tr -d '.')" >> $GITHUB_ENV
 
       # Custom kernel suffix
       - name: Custom Kernel Suffix if set
@@ -485,9 +502,10 @@ jobs:
           SUFFIX="${{ github.event.inputs.SUFFIX }}"
           KANDROID_VERSION="${{ env.KANDROID_VERSION }}"
           FAST_BUILD="${{ github.event.inputs.FAST_BUILD }}"
+          SOURCE_DIR="${{ env.KERNEL_SOURCE_DIR }}"
 
           for path in \
-            kernel_platform/common/scripts/setlocalversion \
+            kernel_platform/$SOURCE_DIR/scripts/setlocalversion \
             kernel_platform/msm-kernel/scripts/setlocalversion \
             kernel_platform/external/dtc/scripts/setlocalversion; do
 
@@ -516,6 +534,7 @@ jobs:
             fi
             chmod +x "$path"
           done
+          cd kernel_platform
           git add -A
           git commit -m "Custom suffix & removed -dirty" || true
 
@@ -526,13 +545,14 @@ jobs:
           cd kernel_workspace
           KANDROID_VERSION="${{ env.KANDROID_VERSION }}"
           FAST_BUILD="${{ github.event.inputs.FAST_BUILD }}"
+          SOURCE_DIR="${{ env.KERNEL_SOURCE_DIR }}"
 
           RANDOM_DIGIT=$(od -An -N1 -tu1 < /dev/urandom | tr -d '[:space:]' | awk '{print $1 % 11}')
           RANDOM_HASH=$(od -An -N7 -tx1 /dev/urandom | tr -d ' \n')
           RANDOM_SUFFIX="${RANDOM_DIGIT}-o-g${RANDOM_HASH}"
 
           for path in \
-            kernel_platform/common/scripts/setlocalversion \
+            kernel_platform/$SOURCE_DIR/scripts/setlocalversion \
             kernel_platform/msm-kernel/scripts/setlocalversion \
             kernel_platform/external/dtc/scripts/setlocalversion; do
 
@@ -558,6 +578,7 @@ jobs:
             fi
             chmod +x "$path"
           done
+          cd kernel_platform
           git add -A
           git commit -m "Random suffix & remove -dirty" || true
 
@@ -651,10 +672,11 @@ jobs:
           set -x
           mkdir -p $GITHUB_WORKSPACE/debug_logs/patch_rejections
           cd kernel_workspace
+          SOURCE_DIR="${{ env.KERNEL_SOURCE_DIR }}"
           
           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
             SUSFS_META="${{ github.event.inputs.SUSFS_META }}"
-            if [ -f "kernel_platform/./fs/susfs.c" ]; then
+            if [ -f "kernel_platform/$SOURCE_DIR/fs/susfs.c" ]; then
                 echo "SUSFS already present in source, skipping clone."
             else
                 echo "Cloning SUSFS..."
@@ -669,12 +691,12 @@ jobs:
           cd kernel_platform
           
           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
-            if [ ! -f "./fs/susfs.c" ]; then
+            if [ ! -f "./$SOURCE_DIR/fs/susfs.c" ]; then
                 echo "Applying SUSFS files..."
-                cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch ./
-                if [ -f "./50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" ]; then
-                    cp ../susfs4ksu/kernel_patches/fs/* ./fs/
-                    cp ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
+                cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch ./$SOURCE_DIR/ || echo "Patch file not found for version"
+                if [ -f "./$SOURCE_DIR/50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" ]; then
+                    cp ../susfs4ksu/kernel_patches/fs/* ./$SOURCE_DIR/fs/
+                    cp ../susfs4ksu/kernel_patches/include/linux/* ./$SOURCE_DIR/include/linux/
                 fi
             else
                 echo "Skipping SUSFS file copy, files exist."
@@ -682,24 +704,24 @@ jobs:
           fi
 
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
-            if [ -f "./crypto/lz4k.c" ]; then
+            if [ -f "./$SOURCE_DIR/crypto/lz4k.c" ]; then
                 echo "ZRAM/LZ4K already present, skipping."
             else
                 echo "Applying ZRAM files..."
-                cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./include/linux/
-                cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./lib/
-                cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./crypto/
-                cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./lib/
+                cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./$SOURCE_DIR/include/linux/
+                cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./$SOURCE_DIR/lib/
+                cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./$SOURCE_DIR/crypto/
+                cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./$SOURCE_DIR/lib/
             fi
           fi
 
-          cd .
+          cd ./$SOURCE_DIR
           GKI_V="${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}"
           SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | head -n1 | cut -d= -f2 | tr -d ' ')
 
           if [ "$GKI_V" == "android13-5.15" ] && [ "$SUBLEVEL" -lt 123 ]; then
             echo "Fixing 5.15 legacy bugs..."
-            cp ../Action-Build/patches/fix_5.15.legacy ./fix_5.15.legacy.patch
+            cp ../../Action-Build/patches/fix_5.15.legacy ./fix_5.15.legacy.patch
             patch -p1 < fix_5.15.legacy.patch || true
           fi
 
@@ -716,26 +738,19 @@ jobs:
           fi
 
           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
-            # Safe Patch Application with Dry Run
             if [ -f "50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" ]; then
-                echo "Checking SUSFS patch..."
+                echo "Applying SUSFS patch..."
                 if patch -p1 --dry-run -N < "50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" > /dev/null 2>&1; then
-                    echo "Applying SUSFS patch..."
                     patch -p1 < "50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch"
                 else
-                    echo "SUSFS patch seems already applied or conflicts. Skipping to prevent errors."
+                    echo "SUSFS patch already applied or conflicts. Skipping."
                     find . -name "*.rej" -exec cp {} $GITHUB_WORKSPACE/debug_logs/patch_rejections/ \;
                 fi
             fi
             
-            # Revert/Fake Patch logic omitted for safety/clarity unless strictly necessary
             if [ "${{ github.event.inputs.XUS_FIX }}" = "true" ]; then
-              if [ -f "../Action-Build/patches/No_5uS.patch" ]; then
-                  cp ../Action-Build/patches/No_5uS.patch ./
-                  patch -p1 < No_5uS.patch || true
-              else
-                  echo "Warning: No_5uS.patch not found in Action-Build/patches. Skipping."
-              fi
+              cp ../../Action-Build/patches/No_5uS.patch ./
+              patch -p1 < No_5uS.patch || true
             fi    
           fi
 
@@ -744,7 +759,7 @@ jobs:
         run: |
           set -x
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          cd kernel_workspace/kernel_platform
+          cd kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
           for p in ./kernel/sched/hmbird* ./vendor/oplus/kernel/cpu/sched_ext/hmbird*; do
             [ -d "$p" ] && { echo "HMBIRD code exists, skipping."; exit 0; }
           done
@@ -756,7 +771,7 @@ jobs:
         run: |
           set -x
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          cd kernel_workspace/kernel_platform
+          cd kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
           if [ "$KV1" -lt 6 ]; then
             patch -p1 --dry-run --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1-.patch" && patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1-.patch" || echo "Unicode patch skipped"
           else
@@ -768,8 +783,7 @@ jobs:
         run: |
           set -x
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/SukiSU_patch/other/zram/zram_patch/${{ env.KERNEL_VERSION }}"
-          cd kernel_workspace/kernel_platform
-          # Safe checks
+          cd kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
           if [ ! -f "crypto/lz4k.c" ]; then
              echo "Patching lz4kd..."
              patch -p1 -F 3 < "${PATCH_DIR}/lz4kd.patch" || true
@@ -785,8 +799,7 @@ jobs:
         if: ${{ github.event.inputs.SCHED == 'true' }}
         run: |
           set -x
-          cd kernel_workspace/kernel_platform
-          # Safe check
+          cd kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
           if [ -d "kernel/sched/fengchi" ]; then
               echo "Fengchi/SCHED already exists. Skipping."
               exit 0
@@ -809,7 +822,7 @@ jobs:
         if: ${{ github.event.inputs.LSM == 'true' }}
         run: |
           set -x
-          cd kernel_workspace/kernel_platform
+          cd kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
           if [ -d "security/baseband_guard" ]; then
               echo "Baseband Guard (LSM) already exists. Skipping."
           else
@@ -821,12 +834,22 @@ jobs:
       - name: Add Configuration Settings
         run: |
           set -x
-          cd kernel_workspace/kernel_platform
-          CONFIG_FILE=./arch/arm64/configs/gki_defconfig
+          cd kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
           KERNEL_VERSION="${{ env.KERNEL_VERSION }}"
 
+          # Support both gki_defconfig and defconfig
+          if [ -f "arch/arm64/configs/gki_defconfig" ]; then
+             CONFIG_FILE="arch/arm64/configs/gki_defconfig"
+          elif [ -f "arch/arm64/configs/defconfig" ]; then
+             CONFIG_FILE="arch/arm64/configs/defconfig"
+          else
+             echo "ERROR: No defconfig found in arch/arm64/configs/"
+             ls -la arch/arm64/configs/ || true
+             exit 1
+          fi
+
           if [ ! -f "$CONFIG_FILE" ]; then
-              echo "ERROR: gki_defconfig not found at $CONFIG_FILE"
+              echo "ERROR: Config file not found at $CONFIG_FILE"
               exit 1
           fi
 
@@ -912,7 +935,7 @@ jobs:
         run: |
           set -x
           PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          cd kernel_workspace/kernel_platform
+          cd kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
           if [[ "${CPU}" == sm* ]]; then
             patch -p1 --dry-run -F 3 < "${PATCH_DIR}/IPv6_NAT_FIX.patch" && patch -p1 -F 3 < "${PATCH_DIR}/IPv6_NAT_FIX.patch" || echo "IPv6 Fix skipped"
           fi
@@ -930,7 +953,7 @@ jobs:
           echo "KBUILD_BUILD_TIMESTAMP=${DATESTR}" >> "$GITHUB_ENV"
           echo "KBUILD_BUILD_VERSION=1" >> "$GITHUB_ENV"
           cd kernel_workspace/kernel_platform/
-          for f in ./scripts/mkcompile_h ./msm-kernel/scripts/mkcompile_h; do
+          for f in ${{ env.KERNEL_SOURCE_DIR }}/scripts/mkcompile_h; do
             if [ -f "$f" ]; then
               if grep -q 'UTS_VERSION=' "$f"; then
                 perl -pi -e "s{UTS_VERSION=\"\\\$\\(.*?\\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $DATESTR\"}" "$f"
@@ -944,8 +967,12 @@ jobs:
         if: ${{ (env.KERNEL_VERSION == '5.10' || env.KERNEL_VERSION == '5.15') && github.event.inputs.FAST_BUILD == 'true' }}
         run: |
           set -x
-          cd kernel_workspace/kernel_platform
-          DEFCONFIG=./arch/arm64/configs/gki_defconfig
+          cd kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
+          if [ -f "arch/arm64/configs/gki_defconfig" ]; then
+              DEFCONFIG="arch/arm64/configs/gki_defconfig"
+          else
+              DEFCONFIG="arch/arm64/configs/defconfig"
+          fi
           sed -i 's/^CONFIG_LTO=n/CONFIG_LTO=y/' "$DEFCONFIG"
           sed -i 's/^CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_THIN=y/' "$DEFCONFIG"
           sed -i 's/^CONFIG_LTO_CLANG_NONE=y/CONFIG_LTO_CLANG_THIN=y/' "$DEFCONFIG"
@@ -964,18 +991,23 @@ jobs:
           set -x
           KERNEL_VERSION="${{ env.KERNEL_VERSION }}"
           cd kernel_workspace/kernel_platform
+          SOURCE_DIR="${{ env.KERNEL_SOURCE_DIR }}"
 
-          # Auto detect LLVM_IAS
-          if [[ -f ./build.config.arm ]] && grep -q '^LLVM_IAS=1' ./build.config.arm; then
+          if [[ -f ./$SOURCE_DIR/build.config.arm ]] && grep -q '^LLVM_IAS=1' ./$SOURCE_DIR/build.config.arm; then
             USE_LLVM_IAS=true
           else
             USE_LLVM_IAS=false
           fi
 
-          # Read CLANG_PREBUILT_BIN
-          CLANG_PREBUILT_BIN=$(grep '^CLANG_PREBUILT_BIN=' ./build.config.common | cut -d= -f2 || true)
+          # Try to find build.config in source dir
+          CLANG_PREBUILT_BIN=$(grep '^CLANG_PREBUILT_BIN=' ./$SOURCE_DIR/build.config.common | cut -d= -f2 || true)
+          
+          # Try root if not in source dir (for flat kernels)
+          if [[ -z "$CLANG_PREBUILT_BIN" ]] && [ -f ./build.config.common ]; then
+              CLANG_PREBUILT_BIN=$(grep '^CLANG_PREBUILT_BIN=' ./build.config.common | cut -d= -f2 || true)
+          fi
+
           if [[ -z "$CLANG_PREBUILT_BIN" ]]; then
-            # Fallback if build.config is missing (common in custom forks)
             if [ -d "./prebuilts/clang/host/linux-x86" ]; then
                  CLANG_PATH=$(find ./prebuilts/clang/host/linux-x86 -maxdepth 1 -type d | grep -v prebuilts | head -1)
                  CLANG_PREBUILT_BIN="${CLANG_PATH}/bin"
@@ -988,7 +1020,9 @@ jobs:
           if [[ "$CLANG_PREBUILT_BIN" =~ (clang-r[0-9a-z]+) ]]; then
             CLANG_VERSION="${BASH_REMATCH[1]}"
           else
-            if [[ -f ./build.config.constants ]]; then
+            if [[ -f ./$SOURCE_DIR/build.config.constants ]]; then
+              CLANG_VERSION=$(grep '^CLANG_VERSION=' ./$SOURCE_DIR/build.config.constants | cut -d= -f2 || true)
+            elif [ -f ./build.config.constants ]; then
               CLANG_VERSION=$(grep '^CLANG_VERSION=' ./build.config.constants | cut -d= -f2 || true)
             fi
           fi
@@ -1003,26 +1037,26 @@ jobs:
               CLANG_PREBUILT_BIN=${CLANG_PREBUILT_BIN/\$\{CLANG_VERSION\}/$CLANG_VERSION}
           fi
 
-          CLANG_DIR=$(echo "$CLANG_PREBUILT_BIN" | cut -d'/' -f1)
-          CLANG_PATH=$(basename "$(dirname "$CLANG_PREBUILT_BIN")")
-
-          echo "✅ CLANG_VERSION=$CLANG_VERSION"
-          echo "✅ CLANG_PREBUILT_BIN=$CLANG_PREBUILT_BIN"
-          echo "✅ USE_LLVM_IAS=$USE_LLVM_IAS"
-
           export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/$CLANG_PREBUILT_BIN:$PATH"
           export PATH="/usr/lib/ccache:$PATH"
           export CC="ccache clang"
           
-          cd .
-          MAKE_ARGS="LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld HOSTLD=ld.lld"
-
-          # Add Rust and Pahole if they exist in prebuilts
-          if [ -d "./prebuilts/rust/linux-x86" ]; then
-              MAKE_ARGS="$MAKE_ARGS RUSTC=$(realpath ./prebuilts/rust)/linux-x86/1.73.0b/bin/rustc"
+          cd ./$SOURCE_DIR
+          
+          # Determine Defconfig name
+          if [ -f "arch/arm64/configs/gki_defconfig" ]; then
+              DEFCONFIG="gki_defconfig"
+          else
+              DEFCONFIG="defconfig"
           fi
-          if [ -d "./prebuilts/kernel-build-tools/linux-x86" ]; then
-              MAKE_ARGS="$MAKE_ARGS PAHOLE=$(realpath ./prebuilts/kernel-build-tools)/linux-x86/bin/pahole"
+
+          MAKE_ARGS="LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-"
+
+          if [ -d "../../prebuilts/rust/linux-x86" ]; then
+              MAKE_ARGS="$MAKE_ARGS RUSTC=$(realpath ../../prebuilts/rust)/linux-x86/1.73.0b/bin/rustc"
+          fi
+          if [ -d "../../prebuilts/kernel-build-tools/linux-x86" ]; then
+              MAKE_ARGS="$MAKE_ARGS PAHOLE=$(realpath ../../prebuilts/kernel-build-tools)/linux-x86/bin/pahole"
           fi
           
           MAKE_ARGS="$MAKE_ARGS KCFLAGS+=-Wno-error"
@@ -1031,7 +1065,7 @@ jobs:
             MAKE_ARGS="LLVM_IAS=1 $MAKE_ARGS"
           fi
 
-          make -j$(nproc --all) O=out $MAKE_ARGS gki_defconfig
+          make -j$(nproc --all) O=out $MAKE_ARGS $DEFCONFIG
           make -j$(nproc --all) O=out $MAKE_ARGS
           ccache -s
 
@@ -1041,7 +1075,6 @@ jobs:
           set -x
           cd kernel_workspace
           
-          # Check if standard OnePlus build scripts exist
           if [ -f ./kernel_platform/build_with_bazel.py ]; then
             ./kernel_platform/oplus/bazel/oplus_modules_variant.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
             ./kernel_platform/build_with_bazel.py -t ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
@@ -1051,16 +1084,13 @@ jobs:
           else
             # Generic Make Fallback
             echo "No official build script found. Using generic make fallback."
-            cd kernel_platform
+            cd kernel_platform/${{ env.KERNEL_SOURCE_DIR }}
             
-            # Fix: Correct path to prebuilts (./prebuilts, not ../prebuilts)
-            export PATH=$(find ./prebuilts/clang/host/linux-x86 -type d -name bin):$PATH
+            export PATH=$(find ../../prebuilts/clang/host/linux-x86 -type d -name bin):$PATH
             export PATH="/usr/lib/ccache:$PATH"
             
-            # Saving logs for debugging
             make -j$(nproc) LLVM=1 LLVM_IAS=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O=out \
                 KCFLAGS="-Wno-error" \
-                LD=ld.lld HOSTLD=ld.lld \
                 Image.gz-dtb Image dtbo.img 2>&1 | tee $GITHUB_WORKSPACE/debug_logs/build.log
           fi
 
@@ -1071,18 +1101,24 @@ jobs:
           git clone https://github.com/Numbersf/AnyKernel3 --depth=1
           rm -rf ./AnyKernel3/.git
           mkdir -p kernel_workspace/kernel_platform/out/Final-Image-Find/
-          image_path=$(find "./kernel_workspace/kernel_platform/out/" -name "Image" | head -n 1)
+          
+          # Image location logic
+          SEARCH_DIR="kernel_workspace/kernel_platform"
+          if [ "${{ env.KERNEL_SOURCE_DIR }}" != "." ]; then
+              SEARCH_DIR="$SEARCH_DIR/${{ env.KERNEL_SOURCE_DIR }}"
+          fi
+          
+          image_path=$(find "./$SEARCH_DIR/out/" -name "Image" | head -n 1)
           if [ -n "$image_path" ]; then
             echo "Found Image in out/"
           else
-            # Fallback search for Image.gz-dtb which is common
-            image_path=$(find "./kernel_workspace/kernel_platform/" -maxdepth 3 -name "Image" -o -name "Image.gz-dtb" | head -n 1)
+            image_path=$(find "./$SEARCH_DIR/" -maxdepth 3 -name "Image" -o -name "Image.gz-dtb" | head -n 1)
             if [ -n "$image_path" ]; then
                echo "Found Image/Image.gz-dtb at $image_path"
             else
               echo "ERROR: No Image found."
               echo "=== Directory Listing ===" > $GITHUB_WORKSPACE/debug_logs/missing_image.log
-              ls -laR ./kernel_workspace/kernel_platform >> $GITHUB_WORKSPACE/debug_logs/missing_image.log
+              ls -laR ./kernel_workspace >> $GITHUB_WORKSPACE/debug_logs/missing_image.log
               exit 1
             fi
           fi
@@ -1155,25 +1191,14 @@ jobs:
               ARTIFACT_NAME="Manager"
               ;;
           esac
-          echo "Using branch: $BRANCH"
-          echo "Downloading artifact: $ARTIFACT_NAME"
           run_id=$(gh api \
             "repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?branch=$BRANCH&status=success&per_page=1" \
             --jq '.workflow_runs[0].id' || echo "")
-
-          if [[ -z "$run_id" ]]; then
-            echo "No successful workflow run found on branch $BRANCH. Skipping download."
-            exit 0
-          fi
+          if [[ -z "$run_id" ]]; then exit 0; fi
           artifact_url=$(gh api \
             "repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/$run_id/artifacts" | \
             jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url" | head -n1)
-
-          if [[ -z "$artifact_url" ]]; then
-            echo "No artifact '$ARTIFACT_NAME' found in run $run_id. Skipping download."
-            exit 0
-          fi
-          echo "Downloading from: $artifact_url"
+          if [[ -z "$artifact_url" ]]; then exit 0; fi
           curl -fL -H "Authorization: token $GITHUB_TOKEN" -o "${ARTIFACT_NAME}.zip" "$artifact_url"
           unzip -j "${ARTIFACT_NAME}.zip" "*.apk" -d ./AnyKernel3/
 
@@ -1218,4 +1243,4 @@ jobs:
           name: Debug_Logs_Failure
           path: |
             debug_logs/
-            kernel_workspace/kernel_platform/out/.config
+            kernel_workspace/kernel_platform/${{ env.KERNEL_SOURCE_DIR }}/out/.config
